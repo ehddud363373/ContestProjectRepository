@@ -1,0 +1,31 @@
+# Gradle / 빌드 결과물
+.gradle/
+build/
+/app/build/
+
+# 로컬 환경 (SDK 경로, 비밀 값) - 절대 커밋 금지
+local.properties
+.env
+*.env
+secrets.properties
+keystore.properties
+
+# 서명 키
+*.jks
+*.keystore
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JVM 크래시 로그 (메모리 부족 등으로 튕길 때 자동 생성)
+hs_err_pid*.log
+replay_pid*.log
