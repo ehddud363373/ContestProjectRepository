@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,11 +29,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.contestproject.app.R
-import com.contestproject.app.domain.FreshAirMode
-import com.contestproject.app.domain.GuardEvent
+import com.contestproject.app.data.vehicle.VehicleStatus
+import com.contestproject.app.domain.NapMonitor
 import com.contestproject.app.domain.NapPolicy
 import com.contestproject.app.domain.NapSession
 import com.contestproject.app.domain.NapState
@@ -43,16 +42,17 @@ import com.contestproject.app.domain.StepStatus
 import com.contestproject.app.domain.WakeStep
 import com.contestproject.app.domain.WakeStepKind
 import com.contestproject.app.presentation.component.CheckMark
-import com.contestproject.app.presentation.component.CheckRow
 import com.contestproject.app.presentation.component.CommaMark
-import com.contestproject.app.presentation.component.NapProgressBar
+import com.contestproject.app.presentation.component.MonitorRow
+import com.contestproject.app.presentation.component.NapTimeline
 import com.contestproject.app.presentation.component.Panel
-import com.contestproject.app.presentation.component.PanelLabel
 import com.contestproject.app.presentation.component.ScreenScaffold
 import com.contestproject.app.presentation.component.SecondaryButton
 import com.contestproject.app.presentation.component.TopLine
+import com.contestproject.app.presentation.component.ValueTag
 import com.contestproject.app.presentation.component.formatCountdown
 import com.contestproject.app.presentation.component.formatTemp
+import com.contestproject.app.presentation.component.minuteMark
 import com.contestproject.app.presentation.component.rememberTimeFormatter
 import com.contestproject.app.presentation.theme.Shimpyo
 
@@ -60,9 +60,75 @@ import com.contestproject.app.presentation.theme.Shimpyo
 internal fun displayRemainingMs(session: NapSession, now: Long): Long =
     session.remainingMs(now) * NapPolicy.MINUTE_MS / session.minuteMs
 
+/** 상단 오른쪽: "15분 쪽잠 · 6분 지남 · 오후 3:20에 깨워요" (시연 모드는 시계가 의미 없어 뺀다) */
 @Composable
-fun RestingScreen(state: NapState.Resting, now: Long, busy: Boolean, onWakeNow: () -> Unit) {
+private fun SessionProgressText(session: NapSession, now: Long) {
     val formatTime = rememberTimeFormatter()
+    val elapsed = minuteMark(now.coerceAtMost(session.endAtMs), session.startedAtMs, session.minuteMs)
+    val text = buildString {
+        append(stringResource(R.string.rest_header_progress, session.plannedMinutes, elapsed))
+        if (!session.isDemo) append(" · ").append(stringResource(R.string.rest_header_until, formatTime(session.endAtMs)))
+    }
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = Shimpyo.colors.textSecondary)
+}
+
+/** 이번 구간(시작 ~ 깨우기)의 타임라인. 차가 실제로 한 일을 점으로 찍는다. */
+@Composable
+private fun SessionTimeline(session: NapSession, monitor: NapMonitor, now: Long) {
+    val events = monitor.guardEvents(session.startedAtMs, session.endAtMs)
+    val split = (session.preWakeAtMs - session.startedAtMs).toFloat() / session.totalMs
+    val prewakeMin = session.plannedMinutes - NapPolicy.PRE_WAKE_LEAD_MIN
+    NapTimeline(
+        progress = session.progress(now),
+        split = split,
+        marks = events.marks(session.startedAtMs, session.totalMs),
+        labels = listOf(
+            0f to stringResource(R.string.tl_start),
+            split to stringResource(R.string.tl_prewake, prewakeMin),
+            1f to stringResource(R.string.tl_wake, session.plannedMinutes),
+        ),
+        description = stringResource(
+            R.string.tl_desc,
+            session.plannedMinutes,
+            minuteMark(now.coerceAtMost(session.endAtMs), session.startedAtMs, session.minuteMs),
+            events.size,
+        ),
+    )
+}
+
+/** 타임라인 아래 한 줄: 가장 최근에 차가 한 일, 없으면 점검 횟수 */
+@Composable
+private fun LatestEventLine(session: NapSession, monitor: NapMonitor) {
+    val latest = monitor.guardEvents(session.startedAtMs).lastOrNull()
+    val text = when {
+        latest != null -> eventText(latest, session.startedAtMs, session.minuteMs)
+        monitor.readAtMs == null -> stringResource(R.string.ev_waiting)
+        else -> stringResource(R.string.ev_none, monitor.record.checks)
+    }
+    Text(
+        text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Shimpyo.colors.surfaceRaised)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (latest != null) Shimpyo.colors.textPrimary else Shimpyo.colors.textSecondary,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+fun RestingScreen(
+    state: NapState.Resting,
+    monitor: NapMonitor,
+    vehicle: VehicleStatus,
+    fanMax: Int?,
+    now: Long,
+    busy: Boolean,
+    onWakeNow: () -> Unit,
+) {
     val session = state.session
     var dimmed by rememberSaveable { mutableStateOf(false) }
 
@@ -75,13 +141,7 @@ fun RestingScreen(state: NapState.Resting, now: Long, busy: Boolean, onWakeNow: 
                     CommaMark(tint = Shimpyo.colors.accent, size = 22.dp)
                     Text(stringResource(R.string.resting_title), style = MaterialTheme.typography.bodyMedium, color = Shimpyo.colors.textPrimary)
                 },
-                right = {
-                    Text(
-                        stringResource(R.string.resting_until, formatTime(now), formatTime(session.endAtMs)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Shimpyo.colors.textSecondary,
-                    )
-                },
+                right = { SessionProgressText(session, now) },
             )
         },
         main = { wide ->
@@ -91,45 +151,20 @@ fun RestingScreen(state: NapState.Resting, now: Long, busy: Boolean, onWakeNow: 
                 style = if (wide) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium,
                 color = Shimpyo.colors.textPrimary,
             )
-            NapProgressBar(
-                progress = session.progress(now),
-                description = stringResource(R.string.progress_desc, session.plannedMinutes, session.restedMinutes(now)),
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TimelineLabel(stringResource(R.string.timeline_start, formatTime(session.startedAtMs)))
-                TimelineLabel(stringResource(R.string.timeline_prewake, formatTime(session.preWakeAtMs)))
-                TimelineLabel(stringResource(R.string.timeline_wake, formatTime(session.endAtMs)))
-            }
+            SessionTimeline(session, monitor, now)
+            LatestEventLine(session, monitor)
         },
         side = { wide ->
-            Panel(if (wide) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth()) {
-                PanelLabel(stringResource(R.string.guarding_title))
-                CheckRow(
-                    stringResource(
-                        if (state.climate.freshAir == FreshAirMode.WINDOW_GAP) R.string.guard_window_gap else R.string.guard_outside_air
-                    )
-                )
-                restClimateLine(state.climate.fanLevel, state.climate.temperatureC)?.let { CheckRow(it) }
-                if (state.climate.seatHeatOn) CheckRow(stringResource(R.string.guard_seat_heat))
-                CheckRow(stringResource(R.string.guard_no_warning))
-                state.guardLog.lastOrNull()?.let { event ->
-                    if (wide) Spacer(Modifier.weight(1f))
-                    Text(
-                        stringResource(
-                            when (event.kind) {
-                                GuardEvent.Kind.RECIRCULATION_REVERTED -> R.string.guard_log_reverted
-                                GuardEvent.Kind.WINDOW_OPENED_INSTEAD -> R.string.guard_log_window
-                            },
-                            formatTime(event.atMs),
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Shimpyo.colors.surfaceRaised)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Shimpyo.colors.textSecondary,
-                    )
+            Panel(Modifier.fillMaxWidth()) {
+                MonitorHeader(monitor, now)
+                Column {
+                    AirRow(monitor, state.climate.freshAir)
+                    RowDivider()
+                    if (TempRow(monitor, vehicle)) RowDivider()
+                    if (FanRow(monitor, fanMax)) RowDivider()
+                    if (SeatHeatRow(monitor)) RowDivider()
+                    if (CarRow(vehicle)) RowDivider()
+                    NextRow(session, monitor, now)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -150,23 +185,30 @@ fun RestingScreen(state: NapState.Resting, now: Long, busy: Boolean, onWakeNow: 
                 textAlign = TextAlign.Center,
             )
         },
-        sideWidth = 400.dp,
+        sideWidth = 440.dp,
     )
 
     if (dimmed) DimOverlay(remaining = formatCountdown(displayRemainingMs(session, now))) { dimmed = false }
 }
 
+/** "4분 뒤 깨울 준비 · 바람 4단 · 22.5℃ · 김서림 제거" (예정) */
 @Composable
-private fun restClimateLine(fanLevel: Int?, tempC: Float?): String? = when {
-    fanLevel != null && tempC != null -> stringResource(R.string.guard_fan_temp, formatTemp(tempC))
-    tempC != null -> formatTemp(tempC)
-    fanLevel != null -> stringResource(R.string.guard_fan)
-    else -> null
-}
-
-@Composable
-private fun TimelineLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = Shimpyo.colors.textSecondary)
+private fun NextRow(session: NapSession, monitor: NapMonitor, now: Long) {
+    val leftMin = ((session.preWakeAtMs - now).coerceAtLeast(0) + session.minuteMs - 1) / session.minuteMs
+    val plan = monitor.wakePlan
+    val detail = listOfNotNull(
+        plan.fanSpeed?.let { stringResource(R.string.val_fan, it) },
+        plan.temperatureC?.let { formatTemp(it) },
+        plan.defroster?.let { stringResource(R.string.detail_defrost) },
+        plan.steeringHeat?.let { stringResource(R.string.detail_steering) },
+    ).joinToString(" · ").ifEmpty { null }
+    MonitorRow(
+        stringResource(R.string.row_next),
+        stringResource(R.string.val_next_prewake, leftMin.toInt()),
+        detail,
+        ValueTag.PLANNED,
+        valueColor = Shimpyo.colors.accentText,
+    )
 }
 
 /** 차량 화면은 앱이 끌 수 없어서, 거의 검은 화면으로 덮고 남은 시간만 흐리게 둔다. 아무 데나 누르면 돌아온다. */
@@ -187,8 +229,7 @@ private fun DimOverlay(remaining: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun PreWakeScreen(state: NapState.PreWake, now: Long, busy: Boolean, onWakeNow: () -> Unit) {
-    val formatTime = rememberTimeFormatter()
+fun PreWakeScreen(state: NapState.PreWake, monitor: NapMonitor, now: Long, busy: Boolean, onWakeNow: () -> Unit) {
     val session = state.session
     ScreenScaffold(
         header = {
@@ -197,13 +238,7 @@ fun PreWakeScreen(state: NapState.PreWake, now: Long, busy: Boolean, onWakeNow: 
                     CommaMark(size = 22.dp)
                     Text(stringResource(R.string.prewake_title), style = MaterialTheme.typography.bodyMedium, color = Shimpyo.colors.textPrimary)
                 },
-                right = {
-                    Text(
-                        stringResource(R.string.resting_until, formatTime(now), formatTime(session.endAtMs)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Shimpyo.colors.textSecondary,
-                    )
-                },
+                right = { SessionProgressText(session, now) },
             )
         },
         main = { wide ->
@@ -218,6 +253,7 @@ fun PreWakeScreen(state: NapState.PreWake, now: Long, busy: Boolean, onWakeNow: 
                 style = MaterialTheme.typography.displayMedium,
                 color = Shimpyo.colors.accentText,
             )
+            SessionTimeline(session, monitor, now)
             SecondaryButton(
                 stringResource(R.string.prewake_get_up),
                 onClick = onWakeNow,
@@ -229,10 +265,12 @@ fun PreWakeScreen(state: NapState.PreWake, now: Long, busy: Boolean, onWakeNow: 
         },
         side = { _ ->
             Panel(Modifier.fillMaxWidth()) {
-                PanelLabel(stringResource(R.string.prewake_steps_title))
-                state.steps.forEachIndexed { index, step ->
-                    WakeStepRow(step, formatTime(session.endAtMs))
-                    if (index != state.steps.lastIndex) HorizontalDivider(color = Shimpyo.colors.border)
+                MonitorHeader(monitor, now, stringResource(R.string.prewake_steps_title))
+                Column {
+                    state.steps.forEachIndexed { index, step ->
+                        WakeStepRow(step, session, monitor, now)
+                        if (index != state.steps.lastIndex) RowDivider()
+                    }
                 }
             }
         },
@@ -240,8 +278,12 @@ fun PreWakeScreen(state: NapState.PreWake, now: Long, busy: Boolean, onWakeNow: 
     )
 }
 
+/**
+ * 깨우는 순서 한 줄. 바람·온도는 바뀐 값(2단 → 4단)과 적용 시각을,
+ * 김서림 제거는 몇 분째 작동 중인지를, 음성은 남은 시간을 보여 준다.
+ */
 @Composable
-private fun WakeStepRow(step: WakeStep, wakeTime: String) {
+private fun WakeStepRow(step: WakeStep, session: NapSession, monitor: NapMonitor, now: Long) {
     val colors = Shimpyo.colors
     val active = step.status == StepStatus.RUNNING
     val done = step.status == StepStatus.DONE
@@ -254,37 +296,48 @@ private fun WakeStepRow(step: WakeStep, wakeTime: String) {
             WakeStepKind.VOICE -> R.string.step_voice
         }
     )
+    val value = when (step.kind) {
+        WakeStepKind.FAN_UP -> stringResource(R.string.step_fan_detail, step.from?.toInt() ?: 0, step.to?.toInt() ?: 0)
+        WakeStepKind.TEMPERATURE -> "${formatTemp(step.from ?: 0f)} → ${formatTemp(step.to ?: 0f)}"
+        else -> null
+    }
     val detail = when {
-        active -> stringResource(R.string.step_running)
         step.status == StepStatus.SKIPPED -> stringResource(R.string.step_skipped)
-        step.kind == WakeStepKind.FAN_UP -> stringResource(R.string.step_fan_detail, step.from?.toInt() ?: 0, step.to?.toInt() ?: 0)
-        step.kind == WakeStepKind.TEMPERATURE -> "${formatTemp(step.from ?: 0f)} → ${formatTemp(step.to ?: 0f)}"
-        step.kind == WakeStepKind.VOICE -> wakeTime
-        else -> ""
+        step.kind == WakeStepKind.DEFROST && active ->
+            monitor.record.defrostRunMs(now)?.let { stringResource(R.string.detail_running_for, durationText(it, session.minuteMs)) }
+                ?: stringResource(R.string.step_running)
+        step.kind == WakeStepKind.VOICE ->
+            stringResource(R.string.prewake_until_wake, formatCountdown(displayRemainingMs(session, now)))
+        active -> stringResource(R.string.step_running)
+        done && step.doneAtMs != null ->
+            stringResource(R.string.step_done_at, minuteMark(step.doneAtMs, session.startedAtMs, session.minuteMs))
+        else -> null
     }
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             when {
-                done -> CheckMark(colors.check, 22.dp)
+                done -> CheckMark(colors.check, 24.dp)
                 active -> Box(Modifier.size(12.dp).clip(RoundedCornerShape(999.dp)).background(colors.accent))
                 else -> Box(Modifier.size(12.dp).clip(RoundedCornerShape(999.dp)).background(colors.border))
             }
         }
-        Text(
-            label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color = when {
-                active -> colors.accentText
-                done -> colors.textPrimary
-                else -> colors.textSecondary
-            },
-        )
-        Text(detail, style = MaterialTheme.typography.bodySmall, color = if (active) colors.accentText else colors.textSecondary)
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                color = when {
+                    active -> colors.accentText
+                    done -> colors.textPrimary
+                    else -> colors.textSecondary
+                },
+            )
+            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (active) colors.accentText else colors.textSecondary) }
+        }
+        value?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.textPrimary) }
     }
 }

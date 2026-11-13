@@ -20,6 +20,10 @@ data class VehicleStatus(
     val cabinTempC: Float? = null,
     val powertrain: Powertrain = Powertrain.UNKNOWN,
     val modelName: String? = null,
+    /** 운전석 문 열림. 문 위치를 못 읽으면 null */
+    val driverDoorOpen: Boolean? = null,
+    /** 전원 차단 경고(PowerDownWarningIndicator). 신호를 못 받으면 null */
+    val vehicleWarning: Boolean? = null,
 )
 
 /** 이 차에서 실제로 쓸 수 있는 제어. 차종마다 다르므로 시작 전에 확인한다. */

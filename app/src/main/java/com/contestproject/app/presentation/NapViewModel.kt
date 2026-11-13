@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.contestproject.app.ShimpyoApp
 import com.contestproject.app.data.vehicle.ClimateCapabilities
 import com.contestproject.app.data.vehicle.VehicleStatus
+import com.contestproject.app.domain.NapMonitor
 import com.contestproject.app.domain.NapNotice
 import com.contestproject.app.domain.NapState
 import kotlinx.coroutines.delay
@@ -25,6 +26,7 @@ class NapViewModel(application: Application) : AndroidViewModel(application) {
     val vehicle: StateFlow<VehicleStatus> = controller.vehicleStatus
     val capabilities: StateFlow<ClimateCapabilities?> = controller.capabilities
     val busy: StateFlow<Boolean> = controller.busy
+    val monitor: StateFlow<NapMonitor> = controller.monitor
 
     /**
      * 남은 시간 표시용 시계. 화면이 보일 때만 돈다.

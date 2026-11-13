@@ -48,24 +48,73 @@
 
     <!-- 쉬는 중 -->
     <string name="resting_title">쉬는 중</string>
-    <string name="resting_until">지금 %1$s · %2$s에 깨워요</string>
-    <string name="progress_desc">%1$d분 중 %2$d분 지남</string>
-    <string name="timeline_start">%1$s 시작</string>
-    <string name="timeline_prewake">%1$s 깨울 준비</string>
-    <string name="timeline_wake">%1$s 깨우기</string>
-    <string name="guarding_title">차가 지키고 있어요</string>
-    <string name="guard_outside_air">바깥 공기 유지 중</string>
-    <string name="guard_window_gap">창문 틈으로 바깥 공기 유지 중</string>
-    <string name="guard_fan_temp">약한 바람 · %1$s</string>
-    <string name="guard_fan">약한 바람</string>
-    <string name="guard_seat_heat">운전석 열선 약하게</string>
-    <string name="guard_no_warning">차량 경고 살피는 중</string>
-    <string name="guard_log_reverted">%1$s 내기순환이 켜져서 바깥 공기로 되돌렸어요</string>
-    <string name="guard_log_window">%1$s 외기 전환이 안 돼서 창문을 조금 열었어요</string>
     <string name="dim_screen">화면 어둡게</string>
     <string name="dim_hint">누르면 돌아와요</string>
     <string name="wake_now">지금 깨기</string>
     <string name="gear_leave_note">기어가 P에서 벗어나면 바로 끝내고\n원래 설정으로 되돌려요</string>
+
+    <string name="rest_header_progress">%1$d분 쪽잠 · %2$d분 지남</string>
+    <string name="rest_header_until">%1$s에 깨워요</string>
+    <string name="tl_start">시작</string>
+    <string name="tl_prewake">%1$d분 · 깨울 준비</string>
+    <string name="tl_wake">%1$d분 · 깨우기</string>
+    <string name="tl_desc">%1$d분 중 %2$d분 지남. 차가 한 일 %3$d번</string>
+    <string name="ev_air_reverted">%1$d분 · 내기순환이 켜져서 바깥 공기로 되돌렸어요</string>
+    <string name="ev_window_opened">%1$d분 · 외기 전환이 안 돼서 창문을 조금 열었어요</string>
+    <string name="ev_corrected">%1$d분 · %2$s 값이 바뀌어서 다시 맞췄어요</string>
+    <string name="ev_none">점검 %1$d회 · 바뀐 값 없음</string>
+    <string name="ev_waiting">첫 점검 중</string>
+    <string name="item_power">공조 전원</string>
+    <string name="item_air">공기 순환</string>
+    <string name="item_ac">에어컨</string>
+    <string name="item_temp">온도</string>
+    <string name="item_fan">바람 세기</string>
+    <string name="item_defrost">김서림 제거</string>
+    <string name="item_seat">시트 열선</string>
+    <string name="item_window">창문</string>
+
+    <string name="monitor_title">지금 차 상태</string>
+    <string name="monitor_checked_ago">%1$d초 전 확인</string>
+    <string name="monitor_checking">확인 중</string>
+    <string name="tag_measured">측정</string>
+    <string name="tag_set">설정</string>
+    <string name="tag_planned">예정</string>
+    <string name="row_air">공기</string>
+    <string name="row_temp">온도</string>
+    <string name="row_fan">바람</string>
+    <string name="row_heat">열선</string>
+    <string name="row_car">차 상태</string>
+    <string name="row_next">다음</string>
+    <string name="row_defrost">김서림</string>
+    <string name="val_outside_air">바깥 공기</string>
+    <string name="val_recirculation">내기순환</string>
+    <string name="val_window_gap">창문 틈 %1$d단</string>
+    <string name="val_window_closed">창문 닫힘</string>
+    <string name="detail_air_checks">유지 %2$d/%1$d회 · 되돌림 %3$d회</string>
+    <string name="val_set_temp">설정 %1$s</string>
+    <string name="detail_cabin">실내 %1$s</string>
+    <string name="detail_outside">바깥 %1$s</string>
+    <string name="val_fan">%1$d단</string>
+    <string name="val_fan_of">%1$d단 / 최대 %2$d단</string>
+    <string name="detail_ac_on">에어컨 켜짐</string>
+    <string name="detail_ac_off">에어컨 꺼짐</string>
+    <string name="val_seat_heat">운전석 %1$d단</string>
+    <string name="car_park">P단</string>
+    <string name="car_not_park">P단 아님</string>
+    <string name="car_door_closed">문 닫힘</string>
+    <string name="car_door_open">문 열림</string>
+    <string name="car_no_warning">경고 없음</string>
+    <string name="car_warning">경고 켜짐</string>
+    <string name="val_next_prewake">%1$d분 뒤 깨울 준비</string>
+    <string name="detail_defrost">김서림 제거</string>
+    <string name="detail_steering">핸들 열선</string>
+    <string name="val_on">켜짐</string>
+    <string name="val_off">꺼짐</string>
+    <string name="duration_min">%1$d분</string>
+    <string name="duration_min_sec">%1$d분 %2$d초</string>
+    <string name="duration_sec">%1$d초</string>
+    <string name="detail_running_for">%1$s째 작동</string>
+    <string name="detail_ran_for">%1$s 작동</string>
 
     <!-- 기상 연출 -->
     <string name="prewake_title">깨울 준비 중</string>
@@ -82,17 +131,15 @@
     <string name="step_voice">음성으로 깨우기</string>
     <string name="step_running">진행 중</string>
     <string name="step_skipped">적용 안 됨</string>
+    <string name="step_done_at">%1$d분에 적용</string>
+    <string name="prewake_until_wake">깨우기까지 %1$s</string>
 
     <!-- 깨우기 -->
     <string name="wake_headline">%1$d분 지났어요\n천천히 일어나세요</string>
-    <string name="wake_voice_now">음성으로 깨우는 중</string>
-    <string name="wake_voice_repeat">%1$d번째 깨우는 중 · 소리를 조금씩 키워요</string>
     <string name="wake_awake">일어났어요</string>
-    <string name="wake_repeat_note">반응이 없으면 %1$d초마다 소리를 키워 다시 깨워요</string>
     <string name="wake_car_ready">차는 출발 준비를 마쳤어요</string>
-    <string name="wake_defrost_done">앞유리 김서림 제거 완료</string>
-    <string name="wake_cabin_temp">실내 %1$s</string>
-    <string name="wake_fan_level">바람 %1$d단</string>
+    <string name="wake_call_count">%1$d번째 부르는 중 · 다음까지 %2$d초</string>
+    <string name="wake_call_alert_note">%1$d번 불러도 반응이 없으면 경보로 바꿔요</string>
 
     <!-- 출발 전 확인 -->
     <string name="depart_headline">아직 졸려요?</string>
@@ -101,15 +148,21 @@
     <string name="depart_extend_once">한 번만 쓸 수 있어요</string>
     <string name="depart_extend_used">연장은 이미 썼어요</string>
     <string name="depart_go">괜찮아요 · 출발</string>
-    <string name="depart_go_note">출발을 누르면 공조를 쪽잠 전 설정으로 되돌려요</string>
     <string name="depart_summary_title">이번 쪽잠</string>
-    <string name="depart_rested">쉰 시간</string>
-    <string name="depart_air">바깥 공기</string>
-    <string name="depart_air_kept">계속 유지</string>
-    <string name="depart_air_reverted">계속 유지 · %1$d번 되돌림</string>
-    <string name="depart_windshield">앞유리</string>
-    <string name="depart_windshield_clear">맑음</string>
-    <string name="depart_coffee_tip">커피 한 잔도 졸음을 쫓는 데 도움이 돼요</string>
+    <string name="depart_restore_title">출발을 누르면 되돌리는 값</string>
+    <string name="depart_restore_none">바뀐 값이 없어요</string>
+    <string name="stat_rested">쉰 시간</string>
+    <string name="stat_air">바깥 공기 유지</string>
+    <string name="stat_fixed">다시 맞춤</string>
+    <string name="val_times">%1$d회</string>
+    <string name="val_ratio">%1$d/%2$d회</string>
+    <string name="report_defrost">앞유리 김서림 제거</string>
+    <string name="report_wake">깨운 횟수</string>
+    <string name="report_woke_at">%1$d번째에 일어남</string>
+    <string name="report_woke_early">깨우기 전에 일어남</string>
+    <string name="report_warning">차량 경고</string>
+    <string name="tl_extended">%1$d분 · 연장</string>
+    <string name="tl_now">%1$d분 · 지금</string>
 
     <!-- 경보 -->
     <string name="alert_repeating">음성 경보를 반복하고 있어요</string>
