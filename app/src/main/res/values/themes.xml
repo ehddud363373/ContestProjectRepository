@@ -1,3 +1,7 @@
 <resources>
-    <style name="Theme.ContestProject" parent="android:Theme.Material.NoActionBar" />
+    <!-- 첫 프레임 배경이 Compose 화면과 같도록 맞춘다(주간) -->
+    <style name="Theme.ContestProject" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
 </resources>

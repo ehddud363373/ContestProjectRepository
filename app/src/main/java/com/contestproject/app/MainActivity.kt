@@ -2,27 +2,27 @@ package com.contestproject.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.activity.viewModels
+import com.contestproject.app.presentation.NapViewModel
+import com.contestproject.app.presentation.ShimpyoRoot
 
-// 개발 환경 확인용 빈 화면. 실제 기능은 기획 확정 후 구현한다.
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: NapViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(text = "ContestProject")
-                    }
-                }
+
+        // Pleos 심사 기준: 최상위 화면에서 CCP Back은 finish() 대신 moveTaskToBack(true).
+        // 화면 안의 Back 처리(어둡게 덮은 화면 닫기 등)는 Compose BackHandler가 먼저 가져간다.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                moveTaskToBack(true)
             }
-        }
+        })
+
+        setContent { ShimpyoRoot(viewModel) }
     }
 }
