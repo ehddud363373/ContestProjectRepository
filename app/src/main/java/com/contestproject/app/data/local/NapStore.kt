@@ -50,6 +50,7 @@ class PrefsNapStore(context: Context) : NapStore {
             plannedMinutes = prefs.getInt(K_PLANNED, NapPolicy.DEFAULT_DURATION_MIN),
             extensionUsed = prefs.getBoolean(K_EXTENDED, false),
             minuteMs = prefs.getLong(K_MINUTE, NapPolicy.MINUTE_MS),
+            priorRestMinutes = prefs.getInt(K_PRIOR_REST, 0),
         )
         val snapshot = ClimateSnapshot(
             hvacPower = bool(K_S_POWER),
@@ -89,6 +90,7 @@ class PrefsNapStore(context: Context) : NapStore {
         putInt(K_PLANNED, session.plannedMinutes)
         putBoolean(K_EXTENDED, session.extensionUsed)
         putLong(K_MINUTE, session.minuteMs)
+        putInt(K_PRIOR_REST, session.priorRestMinutes)
     }
 
     private fun SharedPreferences.Editor.putBool(key: String, value: Boolean?) {
@@ -108,6 +110,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_PLANNED = "planned"
         const val K_EXTENDED = "extended"
         const val K_MINUTE = "minute_ms"
+        const val K_PRIOR_REST = "prior_rest"
         const val K_S_POWER = "s_power"
         const val K_S_RECIRC = "s_recirc"
         const val K_S_AC = "s_ac"
@@ -122,7 +125,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_POWERTRAIN_OVERRIDE = "powertrain_override"
 
         val SESSION_KEYS = listOf(
-            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE,
+            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST,
             K_S_POWER, K_S_RECIRC, K_S_AC, K_S_TEMP, K_S_FAN, K_S_DEFROST, K_S_SEAT, K_S_STEER, K_S_WINDOW,
         )
     }
