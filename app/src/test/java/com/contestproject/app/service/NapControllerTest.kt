@@ -267,6 +267,7 @@ class NapControllerTest {
         r.controller.acknowledgeWake()
         val check = r.controller.state.value as NapState.DepartCheck
         assertFalse(check.canExtend)
+        assertEquals(25, check.restedMinutes) // 15분 + 연장 10분
 
         r.controller.extend()
         runCurrent()

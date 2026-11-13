@@ -12,6 +12,8 @@ data class NapSession(
     val plannedMinutes: Int,
     val extensionUsed: Boolean,
     val minuteMs: Long,
+    /** 연장 전에 이미 쉰 시간(분). 출발 확인 화면에 "쉰 시간"을 합계로 보여 주기 위해 둔다. */
+    val priorRestMinutes: Int = 0,
 ) {
     val totalMs: Long get() = endAtMs - startedAtMs
     val preWakeAtMs: Long get() = endAtMs - NapPolicy.PRE_WAKE_LEAD_MIN * minuteMs
@@ -30,7 +32,7 @@ data class NapSession(
 
     /** 실제로 쉰 시간(분). 시연 모드에서도 '15분'처럼 계획 단위로 보여 준다. */
     fun restedMinutes(nowMs: Long): Int =
-        ((nowMs.coerceAtMost(endAtMs) - startedAtMs) / minuteMs).toInt()
+        priorRestMinutes + ((nowMs.coerceAtMost(endAtMs) - startedAtMs) / minuteMs).toInt()
 
     val canExtend: Boolean get() = !extensionUsed
 
@@ -41,6 +43,7 @@ data class NapSession(
             endAtMs = nowMs + NapPolicy.EXTENSION_MIN * minuteMs,
             plannedMinutes = NapPolicy.EXTENSION_MIN,
             extensionUsed = true,
+            priorRestMinutes = restedMinutes(nowMs),
         )
     }
 

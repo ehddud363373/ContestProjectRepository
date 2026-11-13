@@ -32,6 +32,8 @@ class NapSessionTest {
         assertFalse(extended.canExtend)
         assertEquals(31 * minute, extended.endAtMs)
         assertEquals(10, extended.plannedMinutes)
+        // 연장 뒤 "쉰 시간"은 처음 20분 + 연장 10분 = 30분
+        assertEquals(30, extended.restedMinutes(extended.endAtMs))
     }
 
     @Test(expected = IllegalStateException::class)
