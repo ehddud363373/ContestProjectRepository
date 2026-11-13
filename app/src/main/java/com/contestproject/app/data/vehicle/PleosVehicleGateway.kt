@@ -145,6 +145,10 @@ class PleosVehicleGateway(
             .onFailure { logFailure("register power-down", it) }
         runCatching { sdk.getDoor().registerDoorPosition(driverDoor, doorListener) }
             .onFailure { logFailure("register door", it) }
+        // 등록해도 현재값이 오지 않는다(에뮬레이터에서 확인). 시작값을 직접 읽어 둬야 첫 "열림"을 놓치지 않는다.
+        runCatching {
+            sdk.getDoor().getCurrentDoorPosition(driverDoor, { pos -> if (lastDoorPosition == null) lastDoorPosition = pos ?: 0 }, { logFailure("read door", it) })
+        }
     }
 
     private suspend fun refreshCabinTemp() {
@@ -156,49 +160,52 @@ class PleosVehicleGateway(
     override suspend fun capabilities(): ClimateCapabilities = capabilityLock.withLock {
         cachedCapabilities?.let { return it }
         val sdk = vehicle ?: return ClimateCapabilities()
-        // 초기화 직후에는 서비스 바인딩이 끝나지 않아 실패할 수 있어 짧게 재시도한다.
+        // 차량 서비스가 느릴 때(부팅 직후 등) 일부 확인에 답이 안 올 수 있다.
+        // 답이 없던 항목만 다시 물어보고, 앞서 받은 결과와 합친다.
+        var merged = ClimateCapabilities()
         repeat(CAPABILITY_RETRIES) { attempt ->
-            val caps = readCapabilities(sdk)
-            if (caps != ClimateCapabilities() || attempt == CAPABILITY_RETRIES - 1) {
-                if (caps != ClimateCapabilities()) cachedCapabilities = caps
-                Log.i(TAG, "capabilities: $caps")
-                return caps
+            val (caps, complete) = readCapabilities(sdk)
+            merged = merged.mergedWith(caps)
+            if (complete || attempt == CAPABILITY_RETRIES - 1) {
+                if (merged != ClimateCapabilities()) cachedCapabilities = merged
+                Log.i(TAG, "capabilities (attempt ${attempt + 1}, complete=$complete): $merged")
+                return merged
             }
             delay(RETRY_DELAY_MS)
         }
-        return ClimateCapabilities()
+        return merged
     }
 
-    private suspend fun readCapabilities(sdk: Vehicle): ClimateCapabilities = coroutineScope {
+    private suspend fun readCapabilities(sdk: Vehicle): Pair<ClimateCapabilities, Boolean> = coroutineScope {
         val hvac = sdk.getHVAC()
         // 9가지 확인을 동시에 보낸다. 부팅 직후 차량 서비스가 느려도 전체 대기 시간이 한 번 분량으로 끝난다.
         // 읽기만 되는(READ) 항목은 제어할 수 없으므로 쓰기 권한이 있는 항목만 '지원'으로 본다.
         val recircAreasJob = async { awaitSdk<List<SeatArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacRecirculationCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(areas.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacRecirculationCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
         }
         val powerJob = async { awaitSdk<List<SeatArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacPowerCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(areas.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacPowerCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
         }
         val acJob = async { awaitSdk<List<SeatArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacAcCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(areas.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacAcCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
         }
         val tempJob = async { awaitSdk<Map<SeatArea, AreaBounds<Float>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacTemperatureCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Float>>, _: HvacTemperatureConfigArray? -> ok(b.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacTemperatureCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Float>>, _: HvacTemperatureConfigArray? -> ok(if (c.writable) b else emptyMap()) }, fail) }
         }
         val fanJob = async { awaitSdk<Map<SeatArea, AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacFanSpeedCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Int>> -> ok(b.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacFanSpeedCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Int>> -> ok(if (c.writable) b else emptyMap()) }, fail) }
         }
         val defrostJob = async { awaitSdk<List<WindowArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            hvac.checkHvacDefrosterCapabilities({ c: CapabilityConfig, areas: List<WindowArea> -> ok(areas.takeIf { c.writable }) }, fail) }
+            hvac.checkHvacDefrosterCapabilities({ c: CapabilityConfig, areas: List<WindowArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
         }
         val seatJob = async { awaitSdk<Map<SeatArea, AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            sdk.getSeat().checkSeatTemperatureCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Int>> -> ok(b.takeIf { c.writable }) }, fail) }
+            sdk.getSeat().checkSeatTemperatureCapabilities({ c: CapabilityConfig, b: Map<SeatArea, AreaBounds<Int>> -> ok(if (c.writable) b else emptyMap()) }, fail) }
         }
-        val steeringJob = async { awaitSdk<AreaBounds<Int>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            sdk.getSteeringWheel().checkHvacSteeringWheelHeatCapabilities({ c: CapabilityConfig, b: AreaBounds<Int> -> ok(b.takeIf { c.writable }) }, fail) }
+        val steeringJob = async { awaitSdk<List<AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
+            sdk.getSteeringWheel().checkHvacSteeringWheelHeatCapabilities({ c: CapabilityConfig, b: AreaBounds<Int> -> ok(if (c.writable) listOf(b) else emptyList()) }, fail) }
         }
         val windowJob = async { awaitSdk<Map<WindowArea, AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
-            sdk.getWindow().checkWindowPositionCapabilities({ c: CapabilityConfig, b: Map<WindowArea, AreaBounds<Int>> -> ok(b.takeIf { c.writable }) }, fail) }
+            sdk.getWindow().checkWindowPositionCapabilities({ c: CapabilityConfig, b: Map<WindowArea, AreaBounds<Int>> -> ok(if (c.writable) b else emptyMap()) }, fail) }
         }
 
         val recircAreas = recircAreasJob.await()
@@ -209,7 +216,12 @@ class PleosVehicleGateway(
         val defrost = defrostJob.await()
         val seat = seatJob.await()
         val steering = steeringJob.await()
+
+        // null = 답이 오지 않음(실패·시간 초과), 빈 값 = 차가 지원하지 않음. 둘을 구분해야
+        // 느린 순간에 "외기 제어 안 됨"으로 잘못 판단해 창문을 여는 일이 없다.
+        val answeredAll = listOf(recircAreas, power, ac, temp, fan, defrost, seat, steering).all { it != null }
         val window = windowJob.await()
+        val complete = answeredAll && window != null
 
         recircAreas?.let { pickDriverArea(it) }?.let { recircArea = it }
         power?.let { pickDriverArea(it) }?.let { powerArea = it }
@@ -230,9 +242,9 @@ class PleosVehicleGateway(
             fanSpeed = fanBounds?.let { it.minValue..it.maxValue },
             defroster = defrost?.any { WindowValue.FRONT_WINDSHIELD in it.values } == true,
             seatHeat = seatEntry?.value?.let { it.minValue..it.maxValue }?.takeIf { it.last > 0 },
-            steeringHeat = steering?.let { it.minValue..it.maxValue }?.takeIf { it.last > 0 },
+            steeringHeat = steering?.firstOrNull()?.let { it.minValue..it.maxValue }?.takeIf { it.last > 0 },
             driverWindow = windowBounds?.let { it.minValue..it.maxValue },
-        )
+        ) to complete
     }
 
     private val CapabilityConfig.writable: Boolean
