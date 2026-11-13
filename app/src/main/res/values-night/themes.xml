@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.ContestProject" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>
