@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.contestproject.app.data.vehicle.ClimateSnapshot
 import com.contestproject.app.domain.NapPolicy
+import com.contestproject.app.domain.NapRecord
 import com.contestproject.app.domain.NapSession
 
 /**
@@ -17,6 +18,9 @@ interface NapStore {
     fun updateSession(session: NapSession)
     fun load(): Pair<NapSession, ClimateSnapshot>?
     fun clearSession()
+    /** 쪽잠 기록(되돌림·점검 횟수 등). 세션과 함께 지워진다. */
+    fun saveRecord(record: NapRecord)
+    fun loadRecord(): NapRecord?
     var demoMode: Boolean
     var lastDurationMin: Int
     /** 시연 모드에서만 쓰는 동력원 가정(에뮬레이터가 전기차로 고정돼 있어서). null이면 차에서 읽은 값. */
@@ -41,6 +45,10 @@ class PrefsNapStore(context: Context) : NapStore {
     }
 
     override fun updateSession(session: NapSession) = prefs.edit { putSession(session) }
+
+    override fun saveRecord(record: NapRecord) = prefs.edit { putString(K_RECORD, record.encode()) }
+
+    override fun loadRecord(): NapRecord? = NapRecord.decode(prefs.getString(K_RECORD, null))
 
     override fun load(): Pair<NapSession, ClimateSnapshot>? {
         if (!prefs.contains(K_END)) return null
@@ -111,6 +119,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_EXTENDED = "extended"
         const val K_MINUTE = "minute_ms"
         const val K_PRIOR_REST = "prior_rest"
+        const val K_RECORD = "record"
         const val K_S_POWER = "s_power"
         const val K_S_RECIRC = "s_recirc"
         const val K_S_AC = "s_ac"
@@ -125,7 +134,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_POWERTRAIN_OVERRIDE = "powertrain_override"
 
         val SESSION_KEYS = listOf(
-            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST,
+            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST, K_RECORD,
             K_S_POWER, K_S_RECIRC, K_S_AC, K_S_TEMP, K_S_FAN, K_S_DEFROST, K_S_SEAT, K_S_STEER, K_S_WINDOW,
         )
     }

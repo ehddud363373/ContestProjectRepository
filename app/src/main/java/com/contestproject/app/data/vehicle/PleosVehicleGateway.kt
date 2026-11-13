@@ -79,7 +79,10 @@ class PleosVehicleGateway(
     }
     private val powerDownListener = object : PowerDownWarningIndicatorListener {
         override fun onPowerDownWarningIndicatorUpdated(isOn: Boolean?) {
-            isOn?.let { _events.tryEmit(VehicleEvent.PowerDownWarning(it)) }
+            isOn?.let {
+                _status.update { s -> s.copy(vehicleWarning = it) }
+                _events.tryEmit(VehicleEvent.PowerDownWarning(it))
+            }
         }
         override fun onFailed(e: Exception) = logFailure("power-down listener", e)
     }
@@ -89,6 +92,7 @@ class PleosVehicleGateway(
         override fun onPositionUpdated(pos: Int?) {
             val previous = lastDoorPosition
             lastDoorPosition = pos
+            pos?.let { p -> _status.update { it.copy(driverDoorOpen = p > 0) } }
             if (previous == 0 && (pos ?: 0) > 0) _events.tryEmit(VehicleEvent.DriverDoorOpened)
         }
         override fun onFailed(e: Exception) = logFailure("door listener", e)
@@ -128,13 +132,13 @@ class PleosVehicleGateway(
                 outsideTempC = carProperties.readOutsideTemp(),
             )
         }
-        _status.update { info.copy(cabinTempC = it.cabinTempC) }
+        _status.update { info.copy(cabinTempC = it.cabinTempC, driverDoorOpen = it.driverDoorOpen, vehicleWarning = it.vehicleWarning) }
         // 리스너는 능력 확인으로 실제 영역을 알아낸 뒤에 등록한다.
         scope.launch {
             capabilities()
             // Pleos SDK addListener는 서비스와 통신하며 1~2초씩 걸려 메인 스레드에서 하지 않는다.
             withContext(Dispatchers.IO) { registerListeners(sdk) }
-            refreshCabinTemp()
+            readCabinTemperature()
         }
     }
 
@@ -143,18 +147,25 @@ class PleosVehicleGateway(
             .onFailure { logFailure("register recirculation", it) }
         runCatching { sdk.getSafety().registerPowerDownWarningIndicator(powerDownListener) }
             .onFailure { logFailure("register power-down", it) }
+        runCatching {
+            sdk.getSafety().hasPowerDownWarningIndicator({ on -> on?.let { v -> _status.update { it.copy(vehicleWarning = v) } } }, { logFailure("read power-down", it) })
+        }
         runCatching { sdk.getDoor().registerDoorPosition(driverDoor, doorListener) }
             .onFailure { logFailure("register door", it) }
         // 등록해도 현재값이 오지 않는다(에뮬레이터에서 확인). 시작값을 직접 읽어 둬야 첫 "열림"을 놓치지 않는다.
         runCatching {
-            sdk.getDoor().getCurrentDoorPosition(driverDoor, { pos -> if (lastDoorPosition == null) lastDoorPosition = pos ?: 0 }, { logFailure("read door", it) })
+            sdk.getDoor().getCurrentDoorPosition(driverDoor, { pos ->
+                    if (lastDoorPosition == null) lastDoorPosition = pos ?: 0
+                    pos?.let { p -> _status.update { it.copy(driverDoorOpen = p > 0) } }
+                }, { logFailure("read door", it) })
         }
     }
 
-    private suspend fun refreshCabinTemp() {
-        val hvac = vehicle?.getHVAC() ?: return
+    override suspend fun readCabinTemperature(): Float? {
+        val hvac = vehicle?.getHVAC() ?: return null
         val cabin = awaitSdk<Float?> { ok, fail -> hvac.getHvacTemperatureCurrent(tempArea, TemperatureUnit.CELSIUS, ok, fail) }
         if (cabin != null) _status.update { it.copy(cabinTempC = cabin) }
+        return cabin
     }
 
     override suspend fun capabilities(): ClimateCapabilities = capabilityLock.withLock {

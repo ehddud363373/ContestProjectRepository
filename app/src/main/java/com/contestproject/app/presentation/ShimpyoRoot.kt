@@ -55,6 +55,7 @@ fun ShimpyoRoot(viewModel: NapViewModel) {
     val vehicle by viewModel.vehicle.collectAsStateWithLifecycle()
     val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val monitor by viewModel.monitor.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val minutes by viewModel.selectedMinutes.collectAsStateWithLifecycle()
     val demo by viewModel.demoMode.collectAsStateWithLifecycle()
@@ -80,20 +81,20 @@ fun ShimpyoRoot(viewModel: NapViewModel) {
                                 onSelectMinutes = viewModel::selectMinutes,
                                 onStart = viewModel::startNap,
                                 onToggleDemo = viewModel::toggleDemoMode,
-                            onCyclePowertrain = viewModel::cyclePowertrain,
+                                onCyclePowertrain = viewModel::cyclePowertrain,
                             )
                         }
                         ScreenKey.RESTING -> (napState as? NapState.Resting)?.let {
-                            ShimpyoSurfaceTheme(SleepColors) { RestingScreen(it, now, busy, viewModel::wakeNow) }
+                            ShimpyoSurfaceTheme(SleepColors) { RestingScreen(it, monitor, vehicle, capabilities?.fanSpeed?.last, now, busy, viewModel::wakeNow) }
                         }
                         ScreenKey.PRE_WAKE -> (napState as? NapState.PreWake)?.let {
-                            ShimpyoSurfaceTheme(DawnColors) { PreWakeScreen(it, now, busy, viewModel::wakeNow) }
+                            ShimpyoSurfaceTheme(DawnColors) { PreWakeScreen(it, monitor, now, busy, viewModel::wakeNow) }
                         }
                         ScreenKey.WAKING -> (napState as? NapState.Waking)?.let {
-                            ShimpyoSurfaceTheme(WakeColors) { WakingScreen(it, now, viewModel::acknowledgeWake) }
+                            ShimpyoSurfaceTheme(WakeColors) { WakingScreen(it, monitor, vehicle, capabilities?.fanSpeed?.last, now, viewModel::acknowledgeWake) }
                         }
                         ScreenKey.DEPART -> (napState as? NapState.DepartCheck)?.let {
-                            ShimpyoSurfaceTheme(WakeColors) { DepartScreen(it, busy, viewModel::extend, viewModel::depart) }
+                            ShimpyoSurfaceTheme(WakeColors) { DepartScreen(it, monitor, vehicle, now, busy, viewModel::extend, viewModel::depart) }
                         }
                         ScreenKey.ALERT -> (napState as? NapState.Alert)?.let {
                             ShimpyoSurfaceTheme(AlertColors) { AlertScreen(it, now, viewModel::acknowledgeWake, viewModel::snoozeAlert) }

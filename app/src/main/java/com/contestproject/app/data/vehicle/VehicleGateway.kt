@@ -14,6 +14,8 @@ interface VehicleGateway {
     suspend fun connect()
     suspend fun capabilities(): ClimateCapabilities
     suspend fun readClimate(): ClimateSnapshot
+    /** 실내 실제 온도(센서). 지원하지 않거나 못 읽으면 null */
+    suspend fun readCabinTemperature(): Float?
 
     suspend fun setHvacPower(on: Boolean): Boolean
     suspend fun setRecirculation(on: Boolean): Boolean

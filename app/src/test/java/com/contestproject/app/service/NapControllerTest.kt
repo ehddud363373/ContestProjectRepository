@@ -15,6 +15,9 @@ import com.contestproject.app.domain.AlertReason
 import com.contestproject.app.domain.FreshAirMode
 import com.contestproject.app.domain.NapNotice
 import com.contestproject.app.domain.NapPolicy
+import com.contestproject.app.domain.NapRecord
+import com.contestproject.app.domain.NapEvent
+import com.contestproject.app.domain.ClimateItem
 import com.contestproject.app.domain.NapSession
 import com.contestproject.app.domain.NapState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,6 +59,7 @@ class NapControllerTest {
             status.update { it.copy(connection = VehicleConnection.Connected, gear = GearState.PARK, outsideTempC = 31f) }
         }
         override suspend fun capabilities() = caps
+        override suspend fun readCabinTemperature(): Float? = 26.5f
         override suspend fun readClimate() = ClimateSnapshot(
             recirculation = recirculation.takeIf { caps.recirculation },
             ac = ac, temperatureC = temperature, fanSpeed = fan, defroster = defroster,
@@ -92,7 +96,10 @@ class NapControllerTest {
         override fun save(session: NapSession, snapshot: ClimateSnapshot) { saved = session to snapshot }
         override fun updateSession(session: NapSession) { saved = saved?.copy(first = session) }
         override fun load() = saved
-        override fun clearSession() { saved = null }
+        override fun clearSession() { saved = null; record = null }
+        var record: NapRecord? = null
+        override fun saveRecord(record: NapRecord) { this.record = record }
+        override fun loadRecord() = record
         override var demoMode = false
         override var lastDurationMin = 15
         override var powertrainOverride: String? = null
@@ -174,8 +181,8 @@ class NapControllerTest {
         runCurrent()
 
         assertFalse(r.car.recirculation)
-        val resting = r.controller.state.value as NapState.Resting
-        assertEquals(1, resting.guardLog.size)
+        assertTrue(r.controller.state.value is NapState.Resting)
+        assertEquals(1, r.controller.monitor.value.record.count(NapEvent.Kind.AIR_REVERTED))
     }
 
     @Test
@@ -361,5 +368,103 @@ class NapControllerTest {
         runCurrent()
         assertTrue(r.car.recirculation)
         assertEquals(20f, r.car.temperature)
+    }
+
+    @Test
+    fun `쉬는 중 점검마다 차 값을 다시 읽어 바깥 공기 유지를 센다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+
+        val first = r.controller.monitor.value
+        assertEquals(false, first.reading?.recirculation)
+        assertEquals(24f, first.reading?.temperatureC)
+        assertEquals(26.5f, first.cabinTempC)
+        assertEquals(1, first.record.checks)
+
+        advanceTimeBy(30_500)
+        val later = r.controller.monitor.value.record
+        assertEquals(4, later.checks)
+        assertEquals(later.checks, later.freshAirOkChecks)
+    }
+
+    @Test
+    fun `쉬는 중 온도나 바람이 바뀌면 다음 점검에서 다시 맞추고 기록한다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+
+        r.car.temperature = 28f
+        r.car.fan = 6
+        advanceTimeBy(10_500)
+
+        assertEquals(24f, r.car.temperature)
+        assertEquals(2, r.car.fan)
+        val corrected = r.controller.monitor.value.record.events.filter { it.kind == NapEvent.Kind.CORRECTED }.map { it.item }
+        assertEquals(setOf(ClimateItem.TEMPERATURE, ClimateItem.FAN), corrected.toSet())
+    }
+
+    @Test
+    fun `점검으로 내기순환을 찾으면 바깥 공기로 되돌린다 - 알림이 오지 않는 차 대비`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+
+        r.car.recirculation = true // 리스너 알림 없이 값만 바뀜
+        advanceTimeBy(10_500)
+
+        assertFalse(r.car.recirculation)
+        assertEquals(1, r.controller.monitor.value.record.count(NapEvent.Kind.AIR_REVERTED))
+    }
+
+    @Test
+    fun `기상 연출 뒤에는 깨우는 값을 지키고 출발 확인에서는 고치지 않는다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        advanceTimeBy(12 * minute + 600)
+        assertTrue(r.controller.state.value is NapState.PreWake)
+
+        r.car.fan = 1
+        advanceTimeBy(10_500)
+        assertEquals(4, r.car.fan) // 기상 연출 값으로 다시 맞춤
+
+        r.controller.wakeNow()
+        runCurrent()
+        assertTrue(r.controller.state.value is NapState.DepartCheck)
+        r.car.fan = 7
+        advanceTimeBy(10_500)
+        assertEquals(7, r.car.fan) // 깨어 있는 사람이 바꾼 값은 그대로 둔다
+        assertEquals(7, r.controller.monitor.value.reading?.fanSpeed)
+    }
+
+    @Test
+    fun `몇 번째에 일어났는지와 김서림 제거 시간을 기록하고 저장한다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        advanceTimeBy(15 * minute + 600)
+        advanceTimeBy(NapPolicy.VOICE_REPEAT_SEC * 1000L)
+        val waking = r.controller.state.value as NapState.Waking
+        assertEquals(1, waking.repeats)
+
+        r.controller.acknowledgeWake()
+        val record = r.controller.monitor.value.record
+        assertEquals(2, record.wakeCallsLastRound)
+        assertTrue((record.defrostRunMs(testScheduler.currentTime) ?: 0) >= 3 * minute)
+        assertEquals(record, r.store.record) // 차가 꺼져도 이어지게 저장
+    }
+
+    @Test
+    fun `출발하면 기록을 지운다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertNull(r.store.record)
+        assertNull(r.controller.monitor.value.readAtMs)
     }
 }
