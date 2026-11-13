@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-android {/ㅕㄴ
+android {
     namespace = "com.contestproject.app"
     compileSdk = 35
     // CarPropertyManager(기어·바깥 온도·시동 상태)용 AAOS 라이브러리. 차량에 기본 탑재돼 있다.
