@@ -6,19 +6,61 @@
         android:name="android.hardware.type.automotive"
         android:required="true" />
 
+    <!-- Pleos Vehicle SDK: 쓰는 도메인만 선언한다 (승인되지 않은 권한은 심사 반려 대상) -->
+    <uses-permission android:name="pleos.car.permission.CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_SEATS" />
+    <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_WINDOWS" />
+    <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
+    <uses-permission android:name="pleos.car.permission.CAR_SAFETY" />
+
+    <!-- Pleos TextToSpeech SDK: 깨우기 음성 -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+
+    <!-- AAOS CarPropertyManager: 기어(GEAR_SELECTION), 바깥 온도, 차종·연료 정보 -->
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+    <uses-permission android:name="android.car.permission.CAR_EXTERIOR_ENVIRONMENT" />
+    <uses-permission android:name="android.car.permission.CAR_INFO" />
+
+    <!-- 쪽잠 동안 다른 앱을 써도 시간을 지키기 위한 포그라운드 서비스와 깨우기 알림 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <application
+        android:name=".ShimpyoApp"
         android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.ContestProject">
+
+        <uses-library
+            android:name="android.car"
+            android:required="false" />
+
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:configChanges="uiMode|orientation|screenSize|screenLayout|smallestScreenSize|density"
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.NapService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Nap timer that keeps outside-air ventilation and wakes the driver at the chosen time" />
+        </service>
     </application>
 
 </manifest>
