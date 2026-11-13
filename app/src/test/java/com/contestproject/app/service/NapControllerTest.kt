@@ -50,6 +50,7 @@ class NapControllerTest {
         var window = 0
         var steeringHeat = 0
         var failRecirculation = false
+        var failWindowRead = false
 
         override suspend fun connect() {
             status.update { it.copy(connection = VehicleConnection.Connected, gear = GearState.PARK, outsideTempC = 31f) }
@@ -58,7 +59,7 @@ class NapControllerTest {
         override suspend fun readClimate() = ClimateSnapshot(
             recirculation = recirculation.takeIf { caps.recirculation },
             ac = ac, temperatureC = temperature, fanSpeed = fan, defroster = defroster,
-            driverWindow = window.takeIf { caps.driverWindow != null },
+            driverWindow = window.takeIf { caps.driverWindow != null && !failWindowRead },
         )
         override suspend fun setHvacPower(on: Boolean) = true
         override suspend fun setRecirculation(on: Boolean): Boolean {
@@ -186,6 +187,21 @@ class NapControllerTest {
         val resting = r.controller.state.value as NapState.Resting
         assertEquals(FreshAirMode.WINDOW_GAP, resting.climate.freshAir)
         assertEquals(3, r.car.window) // 0..100 범위의 3%
+
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertEquals(0, r.car.window)
+    }
+
+    @Test
+    fun `시작 전 창문 위치를 못 읽었어도 앱이 연 창문은 출발할 때 닫는다`() = runTest {
+        val r = rig(caps = fullCaps.copy(recirculation = false))
+        r.car.failWindowRead = true
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(3, r.car.window)
 
         r.controller.wakeNow()
         runCurrent()

@@ -111,6 +111,8 @@ class NapController(
     private var tickJob: Job? = null
     private var recirculationReverts = 0
     private var defrosted = false
+    // 앱이 창문을 열었는지. 시작 전 창문 위치를 못 읽었더라도 끝날 때 반드시 닫기 위해 기억한다.
+    private var windowOpenedByApp = false
     // 기상 연출에서 실제로 적용된 값(실패한 항목은 깨우기 화면에 보여 주지 않는다)
     private var wakeTempApplied: Float? = null
     private var wakeFanApplied: Int? = null
@@ -488,8 +490,9 @@ class NapController(
         val range = caps.driverWindow ?: return false
         val travel = range.last - range.first
         if (travel <= 0) return false
+        // 차마다 창문 단계가 다르다(에뮬레이터는 0~10, 한 단계 10%). 가능한 가장 작은 틈을 연다.
         val gap = range.first + ceil(travel * WINDOW_GAP_RATIO).toInt().coerceAtLeast(1)
-        return vehicle.setDriverWindow(gap)
+        return vehicle.setDriverWindow(gap).also { if (it) windowOpenedByApp = true }
     }
 
     private fun freshAirModeFor(caps: ClimateCapabilities): FreshAirMode = when {
@@ -501,7 +504,15 @@ class NapController(
     private suspend fun restoreClimate() {
         val saved = snapshot
         val caps = _capabilities.value ?: return
-        saved.driverWindow?.let { if (caps.driverWindow != null) vehicle.setDriverWindow(it) }
+        caps.driverWindow?.let { range ->
+            when {
+                saved.driverWindow != null -> vehicle.setDriverWindow(saved.driverWindow)
+                // 시작 전 위치를 못 읽었어도 앱이 연 창문은 닫는다(창문 열린 채 출발 방지).
+                windowOpenedByApp -> vehicle.setDriverWindow(range.first)
+                else -> Unit
+            }
+        }
+        windowOpenedByApp = false
         saved.defroster?.let { vehicle.setDefroster(it) }
         saved.steeringHeat?.let { vehicle.setSteeringHeat(it) }
         saved.seatHeat?.let { vehicle.setSeatHeat(it) }
