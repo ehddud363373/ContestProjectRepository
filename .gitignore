@@ -29,3 +29,9 @@ Thumbs.db
 # JVM 크래시 로그 (메모리 부족 등으로 튕길 때 자동 생성)
 hs_err_pid*.log
 replay_pid*.log
+
+# 문서 파일은 저장소에 넣지 않음 (바탕화면에서만 관리)
+*.md
+docs/
+*.docx
+*.pdf
