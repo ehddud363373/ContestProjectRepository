@@ -34,3 +34,6 @@ replay_pid*.log
 docs/
 *.docx
 *.pdf
+
+# Claude 작업 규칙 파일은 내 컴퓨터에만 둠
+CLAUDE.md
