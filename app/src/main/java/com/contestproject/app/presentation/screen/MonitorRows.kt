@@ -180,6 +180,8 @@ internal fun itemName(item: ClimateItem?): String = stringResource(
         ClimateItem.DEFROST -> R.string.item_defrost
         ClimateItem.SEAT_HEAT -> R.string.item_seat
         ClimateItem.WINDOW -> R.string.item_window
+        ClimateItem.REAR_DEFROST -> R.string.item_rear_defrost
+        ClimateItem.STEERING_HEAT -> R.string.item_steering
     }
 )
 

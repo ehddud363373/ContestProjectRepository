@@ -77,6 +77,9 @@
     <string name="item_defrost">김서림 제거</string>
     <string name="item_seat">시트 열선</string>
     <string name="item_window">창문</string>
+    <string name="item_rear_defrost">뒷유리 열선</string>
+    <string name="item_steering">핸들 열선</string>
+    <string name="val_level">%1$d단</string>
 
     <string name="monitor_title">지금 차 상태</string>
     <string name="monitor_checked_ago">%1$d초 전 확인</string>
@@ -131,7 +134,7 @@
     <string name="step_fan_detail">%1$d단 → %2$d단</string>
     <string name="step_temp_down">온도 살짝 낮추기</string>
     <string name="step_temp_up">온도 살짝 올리기</string>
-    <string name="step_defrost">앞유리 김서림 제거</string>
+    <string name="step_defrost">유리 김서림 제거</string>
     <string name="step_steering">핸들 열선 켜기</string>
     <string name="step_voice">음성으로 깨우기</string>
     <string name="step_running">진행 중</string>
@@ -180,11 +183,16 @@
     <string name="alert_air_body">창문을 직접 조금 열어 주세요.</string>
     <string name="alert_no_response_title">일어나세요</string>
     <string name="alert_no_response_body">여러 번 불러도 반응이 없어 소리를 키웠어요.</string>
+    <string name="alert_climate_off_title">공조가 꺼졌어요</string>
+    <string name="alert_climate_off_body">시동이 꺼졌을 수 있어요. 바람이 나오지 않으니 시동을 켜거나 창문을 조금 열어 주세요.</string>
+    <string name="alert_rain_title">비가 와서 창문을 닫았어요</string>
+    <string name="alert_rain_body">바깥 공기가 들어오지 않아요. 잠깐 일어나 환기해 주세요.</string>
     <string name="alert_awake">일어났어요 · 확인</string>
     <string name="alert_snooze">경보 1분 멈춤</string>
     <string name="alert_also_title">이럴 때도 바로 깨워요</string>
     <string name="alert_also_warning">차량 경고등이 켜질 때</string>
     <string name="alert_also_air">바깥 공기로 되돌리지 못할 때</string>
+    <string name="alert_also_climate">공조가 꺼지고 다시 켜지지 않을 때 · 비가 와서 창문을 닫을 때</string>
     <string name="alert_also_gear">기어가 P에서 벗어날 때 (쪽잠 종료)</string>
     <string name="alert_also_door">운전석 문이 열릴 때</string>
     <string name="alert_co_note">차에는 일산화탄소 센서가 없어요. 두통이나 어지러움이 느껴지면 바로 차 밖으로 나가세요.</string>
@@ -204,6 +212,8 @@
     <string name="voice_alert_vehicle">차량 경고가 켜졌어요. 일어나서 계기판을 확인해 주세요.</string>
     <string name="voice_alert_air">바깥 공기를 지키지 못했어요. 일어나서 창문을 열어 주세요.</string>
     <string name="voice_alert_no_response">일어나세요. 쪽잠 시간이 지났어요.</string>
+    <string name="voice_alert_climate_off">공조가 꺼졌어요. 일어나서 시동을 켜거나 창문을 열어 주세요.</string>
+    <string name="voice_alert_rain">비가 와서 창문을 닫았어요. 일어나서 환기해 주세요.</string>
 
     <!-- 알림 -->
     <string name="channel_status">쪽잠 진행 상태</string>

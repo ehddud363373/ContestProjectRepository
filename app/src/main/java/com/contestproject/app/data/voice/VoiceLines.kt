@@ -23,6 +23,8 @@ class ResourceVoiceLines(private val res: Resources) : VoiceLines {
             AlertReason.VEHICLE_WARNING -> R.string.voice_alert_vehicle
             AlertReason.FRESH_AIR_LOST -> R.string.voice_alert_air
             AlertReason.NO_RESPONSE -> R.string.voice_alert_no_response
+            AlertReason.CLIMATE_OFF -> R.string.voice_alert_climate_off
+            AlertReason.RAIN -> R.string.voice_alert_rain
         }
     )
 }

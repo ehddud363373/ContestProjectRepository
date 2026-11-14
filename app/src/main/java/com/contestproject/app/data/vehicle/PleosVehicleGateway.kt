@@ -11,10 +11,12 @@ import ai.pleos.playground.vehicle.api.model.capability.HvacTemperatureConfigArr
 import ai.pleos.playground.vehicle.constant.area.DoorValue
 import ai.pleos.playground.vehicle.constant.area.SeatValue
 import ai.pleos.playground.vehicle.constant.area.WindowValue
+import ai.pleos.playground.vehicle.constant.control.WiperState
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
 import ai.pleos.playground.vehicle.listener.DoorPositionListener
 import ai.pleos.playground.vehicle.listener.HvacRecirculationStateListener
 import ai.pleos.playground.vehicle.listener.PowerDownWarningIndicatorListener
+import ai.pleos.playground.vehicle.listener.WiperStateListener
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -67,7 +69,11 @@ class PleosVehicleGateway(
     private var tempArea: SeatArea = SeatArea(SeatValue.ROW_1_LEFT)
     private var fanArea: SeatArea = SeatArea(SeatValue.ROW_1_LEFT)
     private var seatHeatArea: SeatArea = SeatArea(SeatValue.ROW_1_LEFT)
+    private var dualArea: SeatArea = SeatArea(SeatValue.ROW_1_LEFT)
+    // 동승석 온도 구역. 차가 운전석과 따로 된 구역을 알려 줄 때만 생긴다.
+    private var passengerTempArea: SeatArea? = null
     private val windshield = WindowArea(WindowValue.FRONT_WINDSHIELD)
+    private val rearWindshield = WindowArea(WindowValue.REAR_WINDSHIELD)
     private val driverWindow = WindowArea(WindowValue.ROW_1_LEFT)
     private val driverDoor = DoorArea(DoorValue.ROW_1_LEFT)
 
@@ -85,6 +91,16 @@ class PleosVehicleGateway(
             }
         }
         override fun onFailed(e: Exception) = logFailure("power-down listener", e)
+    }
+    // 와이퍼가 움직이면 비가 오는 것으로 본다(차에 비 감지 공개 API가 없어 와이퍼 상태로 짐작).
+    private val wiperListener = object : WiperStateListener {
+        override fun onWiperStateUpdated(state: WiperState?) {
+            val on = state?.let { it == WiperState.ON } ?: return
+            val before = _status.value.wiperOn
+            _status.update { it.copy(wiperOn = on) }
+            if (before != on) _events.tryEmit(VehicleEvent.WiperChanged(on))
+        }
+        override fun onFailed(e: Exception) = logFailure("wiper listener", e)
     }
     // 등록 직후 들어오는 현재값은 "열림 이벤트"가 아니다. 닫힘(0) → 열림(>0)으로 바뀔 때만 알린다.
     private var lastDoorPosition: Int? = null
@@ -152,6 +168,13 @@ class PleosVehicleGateway(
         }
         runCatching { sdk.getDoor().registerDoorPosition(driverDoor, doorListener) }
             .onFailure { logFailure("register door", it) }
+        runCatching { sdk.getWiper().registerWiperState(windshield, wiperListener) }
+            .onFailure { logFailure("register wiper", it) }
+        runCatching {
+            sdk.getWiper().getCurrentWiperState(windshield, { state ->
+                state?.let { s -> _status.update { it.copy(wiperOn = s == WiperState.ON) } }
+            }, { logFailure("read wiper", it) })
+        }
         // 등록해도 현재값이 오지 않는다(에뮬레이터에서 확인). 시작값을 직접 읽어 둬야 첫 "열림"을 놓치지 않는다.
         runCatching {
             sdk.getDoor().getCurrentDoorPosition(driverDoor, { pos ->
@@ -189,7 +212,7 @@ class PleosVehicleGateway(
 
     private suspend fun readCapabilities(sdk: Vehicle): Pair<ClimateCapabilities, Boolean> = coroutineScope {
         val hvac = sdk.getHVAC()
-        // 9가지 확인을 동시에 보낸다. 부팅 직후 차량 서비스가 느려도 전체 대기 시간이 한 번 분량으로 끝난다.
+        // 10가지 확인을 동시에 보낸다. 부팅 직후 차량 서비스가 느려도 전체 대기 시간이 한 번 분량으로 끝난다.
         // 읽기만 되는(READ) 항목은 제어할 수 없으므로 쓰기 권한이 있는 항목만 '지원'으로 본다.
         val recircAreasJob = async { awaitSdk<List<SeatArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
             hvac.checkHvacRecirculationCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
@@ -215,6 +238,9 @@ class PleosVehicleGateway(
         val steeringJob = async { awaitSdk<List<AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
             sdk.getSteeringWheel().checkHvacSteeringWheelHeatCapabilities({ c: CapabilityConfig, b: AreaBounds<Int> -> ok(if (c.writable) listOf(b) else emptyList()) }, fail) }
         }
+        val dualJob = async { awaitSdk<List<SeatArea>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
+            hvac.checkHvacDualCapabilities({ c: CapabilityConfig, areas: List<SeatArea> -> ok(if (c.writable) areas else emptyList()) }, fail) }
+        }
         val windowJob = async { awaitSdk<Map<WindowArea, AreaBounds<Int>>?>(CAPABILITY_TIMEOUT_MS) { ok, fail ->
             sdk.getWindow().checkWindowPositionCapabilities({ c: CapabilityConfig, b: Map<WindowArea, AreaBounds<Int>> -> ok(if (c.writable) b else emptyMap()) }, fail) }
         }
@@ -227,6 +253,8 @@ class PleosVehicleGateway(
         val defrost = defrostJob.await()
         val seat = seatJob.await()
         val steering = steeringJob.await()
+        // 듀얼 공조는 동승석 온도를 맞출지 판단하는 보조 정보라, 답이 없어도 '완료'를 막지 않는다.
+        val dual = dualJob.await()
 
         // null = 답이 오지 않음(실패·시간 초과), 빈 값 = 차가 지원하지 않음. 둘을 구분해야
         // 느린 순간에 "외기 제어 안 됨"으로 잘못 판단해 창문을 여는 일이 없다.
@@ -238,6 +266,12 @@ class PleosVehicleGateway(
         power?.let { pickDriverArea(it) }?.let { powerArea = it }
         ac?.let { pickDriverArea(it) }?.let { acArea = it }
         val tempEntry = temp?.let { driverEntry(it) }?.also { tempArea = it.key }
+        // 운전석이 들어 있지 않은 동승석(1열 오른쪽) 구역이 따로 있을 때만 동승석 온도를 맞출 수 있다.
+        val passengerEntry = temp?.entries?.firstOrNull { e ->
+            SeatValue.ROW_1_RIGHT in e.key.values && SeatValue.ROW_1_LEFT !in e.key.values
+        }
+        passengerEntry?.let { passengerTempArea = it.key }
+        dual?.let { pickDriverArea(it) }?.let { dualArea = it }
         val fanEntry = fan?.let { driverEntry(it) }?.also { fanArea = it.key }
         val tempBounds = tempEntry?.value
         val fanBounds = fanEntry?.value
@@ -252,9 +286,12 @@ class PleosVehicleGateway(
             temperature = tempBounds?.let { it.minValue..it.maxValue },
             fanSpeed = fanBounds?.let { it.minValue..it.maxValue },
             defroster = defrost?.any { WindowValue.FRONT_WINDSHIELD in it.values } == true,
+            rearDefroster = defrost?.any { WindowValue.REAR_WINDSHIELD in it.values } == true,
             seatHeat = seatEntry?.value?.let { it.minValue..it.maxValue }?.takeIf { it.last > 0 },
             steeringHeat = steering?.firstOrNull()?.let { it.minValue..it.maxValue }?.takeIf { it.last > 0 },
             driverWindow = windowBounds?.let { it.minValue..it.maxValue },
+            dual = !dual.isNullOrEmpty(),
+            passengerTemperature = passengerEntry != null,
         ) to complete
     }
 
@@ -278,9 +315,14 @@ class PleosVehicleGateway(
             temperatureC = if (caps.temperature != null) awaitSdk<Float?> { ok, fail -> hvac.getHvacTemperature(tempArea, TemperatureUnit.CELSIUS, ok, fail) } else null,
             fanSpeed = if (caps.fanSpeed != null) awaitSdk<Int?> { ok, fail -> hvac.getHvacFanSpeed(fanArea, ok, fail) } else null,
             defroster = if (caps.defroster) awaitSdk<Boolean?> { ok, fail -> hvac.getHvacDefrosterState(windshield, ok, fail) } else null,
+            rearDefroster = if (caps.rearDefroster) awaitSdk<Boolean?> { ok, fail -> hvac.getHvacDefrosterState(rearWindshield, ok, fail) } else null,
             seatHeat = if (caps.seatHeat != null) awaitSdk<Int?> { ok, fail -> sdk.getSeat().getHvacSeatTemperature(seatHeatArea, ok, fail) } else null,
             steeringHeat = if (caps.steeringHeat != null) awaitSdk<Int?> { ok, fail -> sdk.getSteeringWheel().getHvacSteeringWheelHeatState(ok, fail) } else null,
             driverWindow = if (caps.driverWindow != null) awaitSdk<Int?> { ok, fail -> sdk.getWindow().getCurrentWindowPosition(driverWindow, ok, fail) } else null,
+            passengerTemperatureC = passengerTempArea?.takeIf { caps.passengerTemperature }?.let { area ->
+                awaitSdk<Float?> { ok, fail -> hvac.getHvacTemperature(area, TemperatureUnit.CELSIUS, ok, fail) }
+            },
+            dualOn = if (caps.dual) awaitSdk<Boolean?> { ok, fail -> hvac.getHvacDualState(dualArea, ok, fail) } else null,
         )
     }
 
@@ -323,6 +365,19 @@ class PleosVehicleGateway(
         requireVehicle().getHVAC().setHvacDefroster(windshield, on, { _, _ -> ok() }, fail)
     }
 
+    override suspend fun setRearDefroster(on: Boolean) = control("rear defroster") { ok, fail ->
+        requireVehicle().getHVAC().setHvacDefroster(rearWindshield, on, { _, _ -> ok() }, fail)
+    }
+
+    override suspend fun setPassengerTemperature(celsius: Float): Boolean {
+        val area = passengerTempArea ?: return false
+        val range = capabilities().temperature ?: return false
+        val target = celsius.coerceIn(range.start, range.endInclusive)
+        return control("passenger temperature") { ok, fail ->
+            requireVehicle().getHVAC().setHvacTemperature(area, target, TemperatureUnit.CELSIUS, { _, _ -> ok() }, fail)
+        }
+    }
+
     override suspend fun setSeatHeat(level: Int): Boolean {
         val range = capabilities().seatHeat ?: return false
         val target = level.coerceIn(range.first, range.last)
@@ -352,6 +407,7 @@ class PleosVehicleGateway(
         runCatching { sdk.getHVAC().unregisterHvacRecirculationState(recircArea, recirculationListener) }
         runCatching { sdk.getSafety().unregisterPowerDownWarningIndicator(powerDownListener) }
         runCatching { sdk.getDoor().unregisterDoorPosition(driverDoor, doorListener) }
+        runCatching { sdk.getWiper().unregisterWiperState(windshield, wiperListener) }
         runCatching { sdk.release() }
         carProperties.release()
         vehicle = null

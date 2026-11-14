@@ -200,6 +200,8 @@ private fun RestorePreview(monitor: NapMonitor) {
         add(stringResource(R.string.row_air), now.recirculation, before.recirculation) { if (it) recirc else outside }
         add(stringResource(R.string.item_ac), now.ac, before.ac) { if (it) on else off }
         add(stringResource(R.string.row_defrost), now.defroster, before.defroster) { if (it) on else off }
+        add(stringResource(R.string.item_rear_defrost), now.rearDefroster, before.rearDefroster) { if (it) on else off }
+        add(stringResource(R.string.item_steering), now.steeringHeat, before.steeringHeat) { if (it > 0) res.getString(R.string.val_level, it) else off }
         add(stringResource(R.string.row_heat), now.seatHeat, before.seatHeat) { res.getString(R.string.val_seat_heat, it) }
         add(stringResource(R.string.item_window), now.driverWindow, before.driverWindow) { if (it > 0) res.getString(R.string.val_window_gap, it) else closed }
     }
@@ -336,10 +338,13 @@ fun AlertScreen(state: NapState.Alert, now: Long, onAwake: () -> Unit, onSnooze:
         side = { _ ->
             Panel(Modifier.fillMaxWidth(), container = colors.surface, border = colors.border) {
                 PanelLabel(stringResource(R.string.alert_also_title), color = colors.textSecondary)
-                listOf(R.string.alert_also_warning, R.string.alert_also_air, R.string.alert_also_gear, R.string.alert_also_door)
-                    .forEachIndexed { index, res ->
+                val also = listOf(
+                    R.string.alert_also_warning, R.string.alert_also_air, R.string.alert_also_climate,
+                    R.string.alert_also_gear, R.string.alert_also_door,
+                )
+                also.forEachIndexed { index, res ->
                         Text(stringResource(res), style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-                        if (index < 3) HorizontalDivider(color = colors.border)
+                        if (index < also.lastIndex) HorizontalDivider(color = colors.border)
                     }
                 Text(
                     stringResource(R.string.alert_co_note),
@@ -357,10 +362,14 @@ private fun alertTitle(reason: AlertReason) = when (reason) {
     AlertReason.VEHICLE_WARNING -> R.string.alert_vehicle_title
     AlertReason.FRESH_AIR_LOST -> R.string.alert_air_title
     AlertReason.NO_RESPONSE -> R.string.alert_no_response_title
+    AlertReason.CLIMATE_OFF -> R.string.alert_climate_off_title
+    AlertReason.RAIN -> R.string.alert_rain_title
 }
 
 private fun alertBody(reason: AlertReason) = when (reason) {
     AlertReason.VEHICLE_WARNING -> R.string.alert_vehicle_body
     AlertReason.FRESH_AIR_LOST -> R.string.alert_air_body
     AlertReason.NO_RESPONSE -> R.string.alert_no_response_body
+    AlertReason.CLIMATE_OFF -> R.string.alert_climate_off_body
+    AlertReason.RAIN -> R.string.alert_rain_body
 }

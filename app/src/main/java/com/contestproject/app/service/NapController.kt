@@ -130,6 +130,10 @@ class NapController(
     private var windowGapPosition: Int? = null
     private var lastVoiceAtMs = 0L
     private var started = false
+    // 김서림 제거 중: 에어컨은 차에 맡기고 풍량은 '이 단계 이상'만 지킨다(차가 김을 빼려고 스스로 올리는 걸 막지 않게).
+    private var defrosting = false
+    // 점검 때 공조가 꺼져 있던 횟수(연속). 다시 켜도 계속 꺼지면 시동이 꺼진 것으로 보고 깨운다.
+    private var powerOffChecks = 0
 
     fun start() {
         if (started) return
@@ -241,9 +245,11 @@ class NapController(
                 updateRecord { it.with(NapEvent(now, NapEvent.Kind.EXTENDED)).copy(defrostEndedAtMs = it.defrostEndedAtMs ?: now) }
                 val caps = _capabilities.value ?: ClimateCapabilities()
                 if (caps.defroster) vehicle.setDefroster(false)
-                if (plan.wakeSteeringHeat && caps.steeringHeat != null) vehicle.setSteeringHeat(0)
+                if (caps.rearDefroster) vehicle.setRearDefroster(false)
+                if (wakeSteeringLevel(caps) != null) vehicle.setSteeringHeat(0)
                 val climate = applyRestClimate(caps)
                 if (caps.defroster) target = target.copy(defroster = false)
+                if (caps.rearDefroster) target = target.copy(rearDefroster = false)
                 _state.value = NapState.Resting(session, climate)
                 voice.announce(lines.extend(minutes))
                 startTicking()
@@ -349,7 +355,9 @@ class NapController(
 
         // 읽는 사이에 단계가 바뀌어 목표가 달라졌으면, 옛 목표로 되돌리지 않는다.
         if (active is NapState.DepartCheck || wanted !== target) return
-        for (item in ClimateCheck.mismatches(wanted, reading)) {
+        val differing = ClimateCheck.mismatches(wanted, reading, fanAtLeast = defrosting)
+        powerOffChecks = if (ClimateItem.POWER in differing) powerOffChecks + 1 else 0
+        for (item in differing) {
             Log.i(TAG, "check: $item differs (want=$wanted got=$reading)")
             when (item) {
                 ClimateItem.AIR -> revertToOutsideAir(_state.value as? NapState.Active ?: return)
@@ -358,15 +366,24 @@ class NapController(
                 }
             }
         }
+        // 다시 켰는데도 다음 점검에서 또 꺼져 있으면 차가 공조를 돌릴 수 없는 상태다
+        // (내연기관 시동 꺼짐 등. 엔진 상태는 공개 API로 읽을 수 없어 공조 전원으로 판단한다). 바람이 멈췄으니 깨운다.
+        if (powerOffChecks >= POWER_OFF_ALERT_CHECKS) {
+            (_state.value as? NapState.Active)?.let { raiseAlert(it.session, AlertReason.CLIMATE_OFF) }
+        }
     }
 
     private suspend fun reapply(item: ClimateItem, wanted: ClimateSnapshot): Boolean = when (item) {
         ClimateItem.POWER -> wanted.hvacPower?.let { vehicle.setHvacPower(it) } ?: false
         ClimateItem.AC -> wanted.ac?.let { vehicle.setAc(it) } ?: false
-        ClimateItem.TEMPERATURE -> wanted.temperatureC?.let { vehicle.setTemperature(it) } ?: false
+        ClimateItem.TEMPERATURE -> wanted.temperatureC?.let { t ->
+            vehicle.setTemperature(t).also { ok -> if (ok) wanted.passengerTemperatureC?.let { vehicle.setPassengerTemperature(it) } }
+        } ?: false
         ClimateItem.FAN -> wanted.fanSpeed?.let { vehicle.setFanSpeed(it) } ?: false
         ClimateItem.DEFROST -> wanted.defroster?.let { vehicle.setDefroster(it) } ?: false
+        ClimateItem.REAR_DEFROST -> wanted.rearDefroster?.let { vehicle.setRearDefroster(it) } ?: false
         ClimateItem.SEAT_HEAT -> wanted.seatHeat?.let { vehicle.setSeatHeat(it) } ?: false
+        ClimateItem.STEERING_HEAT -> wanted.steeringHeat?.let { vehicle.setSteeringHeat(it) } ?: false
         ClimateItem.WINDOW -> wanted.driverWindow?.let { vehicle.setDriverWindow(it) } ?: false
         ClimateItem.AIR -> false
     }
@@ -467,7 +484,22 @@ class NapController(
                 raiseAlert(active.session, AlertReason.VEHICLE_WARNING)
             }
             VehicleEvent.DriverDoorOpened -> if (active is NapState.Resting || active is NapState.PreWake) wakeNow()
+            is VehicleEvent.WiperChanged -> if (event.on && freshAirMode == FreshAirMode.WINDOW_GAP && active.isProtectingAir()) {
+                closeWindowForRain(active)
+            }
         }
+    }
+
+    /**
+     * 창문 틈으로 바깥 공기를 넣던 중 와이퍼가 움직이면(비) 창문을 닫는다. 그러면 바깥 공기가 끊기므로 깨운다.
+     * 차에 비 감지 공개 API가 없어 와이퍼 상태로 짐작한다(와이퍼가 자동이 아니면 비를 알 수 없다).
+     */
+    private suspend fun closeWindowForRain(active: NapState.Active) {
+        val range = _capabilities.value?.driverWindow ?: return
+        vehicle.setDriverWindow(range.first)
+        freshAirMode = FreshAirMode.NONE
+        target = target.copy(driverWindow = null)
+        raiseAlert(active.session, AlertReason.RAIN)
     }
 
     private fun NapState.Active.isProtectingAir() =
@@ -506,6 +538,8 @@ class NapController(
         store.clearSession()
         _monitor.value = NapMonitor()
         target = ClimateSnapshot()
+        defrosting = false
+        powerOffChecks = 0
     }
 
     private fun updateRecord(change: (NapRecord) -> NapRecord) {
@@ -519,6 +553,8 @@ class NapController(
     private suspend fun applyRestClimate(caps: ClimateCapabilities): RestClimate {
         // 공조가 꺼져 있으면 풍량·온도 변경이 거부된다(에뮬레이터에서 확인). 상태를 못 읽은 경우도 있어 항상 켠다.
         // 원래 꺼져 있었다면 끝날 때 restoreClimate가 다시 끈다.
+        defrosting = false
+        powerOffChecks = 0
         val powerOk = caps.hvacPower && vehicle.setHvacPower(true)
         val freshAir = when {
             caps.recirculation && vehicle.setRecirculation(false) -> FreshAirMode.OUTSIDE_AIR
@@ -529,6 +565,7 @@ class NapController(
         val acOk = caps.ac && vehicle.setAc(plan.acOn)
         val temp = caps.temperature?.let { plan.restTempC.coerceIn(it.start, it.endInclusive) }
         val tempOk = temp != null && vehicle.setTemperature(plan.restTempC)
+        val passengerOk = tempOk && passengerFollows(caps) && vehicle.setPassengerTemperature(plan.restTempC)
         val fan = caps.fanSpeed?.let { plan.restFanLevel.coerceIn(it.first, it.last) }
         val fanOk = fan != null && vehicle.setFanSpeed(plan.restFanLevel)
         val seatOk = plan.restSeatHeatLevel > 0 && caps.seatHeat != null && vehicle.setSeatHeat(plan.restSeatHeatLevel)
@@ -538,6 +575,7 @@ class NapController(
             recirculation = false.takeIf { freshAir == FreshAirMode.OUTSIDE_AIR },
             ac = plan.acOn.takeIf { acOk },
             temperatureC = temp.takeIf { tempOk },
+            passengerTemperatureC = temp.takeIf { passengerOk },
             fanSpeed = fan.takeIf { fanOk },
             seatHeat = plan.restSeatHeatLevel.takeIf { seatOk },
             driverWindow = windowGapPosition.takeIf { freshAir == FreshAirMode.WINDOW_GAP },
@@ -547,8 +585,8 @@ class NapController(
                 wakePlan = ClimateSnapshot(
                     fanSpeed = caps.fanSpeed?.let { r -> plan.wakeFanLevel.coerceIn(r.first, r.last) },
                     temperatureC = caps.temperature?.let { r -> plan.wakeTempC.coerceIn(r.start, r.endInclusive) },
-                    defroster = true.takeIf { caps.defroster },
-                    steeringHeat = 1.takeIf { plan.wakeSteeringHeat && caps.steeringHeat != null },
+                    defroster = true.takeIf { caps.anyDefroster },
+                    steeringHeat = wakeSteeringLevel(caps),
                 ),
             )
         }
@@ -566,8 +604,8 @@ class NapController(
                 plan.restFanLevel.coerceIn(it.first, it.last).toFloat(), plan.wakeFanLevel.coerceIn(it.first, it.last).toFloat()))
         }
         if (caps.temperature != null) add(WakeStep(WakeStepKind.TEMPERATURE, StepStatus.PENDING, plan.restTempC, plan.wakeTempC))
-        if (caps.defroster) add(WakeStep(WakeStepKind.DEFROST, StepStatus.PENDING))
-        if (plan.wakeSteeringHeat && caps.steeringHeat != null) add(WakeStep(WakeStepKind.STEERING_HEAT, StepStatus.PENDING))
+        if (caps.anyDefroster) add(WakeStep(WakeStepKind.DEFROST, StepStatus.PENDING))
+        if (wakeSteeringLevel(caps) != null) add(WakeStep(WakeStepKind.STEERING_HEAT, StepStatus.PENDING))
         add(WakeStep(WakeStepKind.VOICE, StepStatus.PENDING))
     }
 
@@ -585,15 +623,29 @@ class NapController(
         }
         caps.temperature?.let { range ->
             val temp = plan.wakeTempC.coerceIn(range.start, range.endInclusive)
-            if (step(WakeStepKind.TEMPERATURE) { vehicle.setTemperature(plan.wakeTempC) }) target = target.copy(temperatureC = temp)
+            if (step(WakeStepKind.TEMPERATURE) { vehicle.setTemperature(plan.wakeTempC) }) {
+                val passengerOk = passengerFollows(caps) && vehicle.setPassengerTemperature(plan.wakeTempC)
+                target = target.copy(temperatureC = temp, passengerTemperatureC = temp.takeIf { passengerOk })
+            }
         }
-        if (plan.wakeSteeringHeat && caps.steeringHeat != null) {
-            step(WakeStepKind.STEERING_HEAT) { vehicle.setSteeringHeat(caps.steeringHeat.last.coerceAtMost(2)) }
+        wakeSteeringLevel(caps)?.let { level ->
+            if (step(WakeStepKind.STEERING_HEAT) { vehicle.setSteeringHeat(level) }) target = target.copy(steeringHeat = level)
         }
-        if (caps.defroster) {
+        if (caps.anyDefroster) {
             markStep(WakeStepKind.DEFROST, StepStatus.RUNNING)
-            if (vehicle.setDefroster(true)) {
-                target = target.copy(defroster = true)
+            // 앞 유리는 바람으로, 뒷유리는 열선으로 김을 뺀다. 둘 중 되는 것만 켠다.
+            val frontOk = caps.defroster && vehicle.setDefroster(true)
+            val rearOk = caps.rearDefroster && vehicle.setRearDefroster(true)
+            if (frontOk || rearOk) {
+                // 김서림 제거를 켜면 차가 습기를 빼려고 에어컨을 켜고 바람을 올리는 경우가 많다(현대차 공조 동작).
+                // 에어컨은 바람을 식혀 습기를 뺀 뒤 히터로 다시 데우므로 겨울에도 춥지 않다.
+                // 앱이 이걸 되돌리면 김이 덜 빠지므로: 에어컨은 지키지 않고(차에 맡김), 풍량은 '이 단계 이상'만 지킨다.
+                defrosting = true
+                target = target.copy(
+                    defroster = true.takeIf { frontOk },
+                    rearDefroster = true.takeIf { rearOk },
+                    ac = null,
+                )
                 val now = clock()
                 updateRecord { it.copy(defrostStartedAtMs = now, defrostEndedAtMs = null) }
             } else {
@@ -603,6 +655,19 @@ class NapController(
         }
     }
 
+    /** 깨울 때 핸들 열선 단계. 겨울이고 차가 지원할 때만. 화면 '예정'과 실제로 보내는 값이 같도록 한곳에서 정한다. */
+    private fun wakeSteeringLevel(caps: ClimateCapabilities): Int? {
+        val range = caps.steeringHeat ?: return null
+        if (!plan.wakeSteeringHeat) return null
+        return WAKE_STEERING_HEAT_LEVEL.coerceIn(range.first.coerceAtLeast(1), range.last)
+    }
+
+    /**
+     * 동승석 온도도 같이 맞출지. 듀얼 공조가 켜진(운전석·동승석 따로) 차만 맞춘다.
+     * 꺼져 있으면 운전석 온도가 차 전체에 적용되고, 동승석을 따로 바꾸면 차가 듀얼을 켜 버릴 수 있어 건드리지 않는다.
+     */
+    private fun passengerFollows(caps: ClimateCapabilities) = caps.passengerTemperature && snapshot.dualOn == true
+
     private fun markStep(kind: WakeStepKind, status: StepStatus) {
         val pre = _state.value as? NapState.PreWake ?: return
         val doneAt = if (status == StepStatus.DONE) clock() else null
@@ -611,6 +676,8 @@ class NapController(
 
     private suspend fun openWindowGap(caps: ClimateCapabilities): Boolean {
         val range = caps.driverWindow ?: return false
+        // 비가 오는 중(와이퍼 작동)에는 창문을 열지 않는다.
+        if (vehicle.status.value.wiperOn == true) return false
         val travel = range.last - range.first
         if (travel <= 0) return false
         // 차마다 창문 단계가 다르다(에뮬레이터는 0~10, 한 단계 10%). 가능한 가장 작은 틈을 연다.
@@ -626,25 +693,45 @@ class NapController(
     private suspend fun restoreClimate() {
         val saved = snapshot
         val caps = _capabilities.value ?: return
-        caps.driverWindow?.let { range ->
-            when {
-                saved.driverWindow != null -> vehicle.setDriverWindow(saved.driverWindow)
-                // 시작 전 위치를 못 읽었어도 앱이 연 창문은 닫는다(창문 열린 채 출발 방지).
-                windowOpenedByApp -> vehicle.setDriverWindow(range.first)
-                else -> Unit
-            }
+        // 시작 전 위치를 못 읽었어도 앱이 연 창문은 닫는다(창문 열린 채 출발 방지).
+        val windowTo = caps.driverWindow?.let { range -> saved.driverWindow ?: range.first.takeIf { windowOpenedByApp } }
+        sendRestore(saved, windowTo, only = null)
+
+        // 차가 그 순간 거부했거나 늦게 반영해 바뀐 값이 남지 않도록, 한 번 다시 읽어 다른 항목만 한 번 더 보낸다.
+        val after = vehicle.readClimate()
+        val expected = saved.copy(
+            hvacPower = saved.hvacPower?.takeIf { !it }, // 공조 전원은 원래 꺼져 있었을 때만 되돌린다
+            passengerTemperatureC = saved.passengerTemperatureC?.takeIf { saved.dualOn == true },
+            driverWindow = null,
+            dualOn = null,
+        )
+        val again = ClimateCheck.mismatches(expected, after).toMutableSet()
+        if (windowTo != null && after.driverWindow != null && after.driverWindow != windowTo) again += ClimateItem.WINDOW
+        if (again.isNotEmpty()) {
+            Log.i(TAG, "restore: retry $again")
+            sendRestore(saved, windowTo, only = again)
         }
         windowOpenedByApp = false
         windowGapPosition = null
-        saved.defroster?.let { vehicle.setDefroster(it) }
-        saved.steeringHeat?.let { vehicle.setSteeringHeat(it) }
-        saved.seatHeat?.let { vehicle.setSeatHeat(it) }
-        saved.fanSpeed?.let { vehicle.setFanSpeed(it) }
-        saved.temperatureC?.let { vehicle.setTemperature(it) }
-        saved.ac?.let { vehicle.setAc(it) }
-        saved.recirculation?.let { vehicle.setRecirculation(it) }
-        saved.hvacPower?.let { if (!it) vehicle.setHvacPower(false) }
         snapshot = ClimateSnapshot()
+    }
+
+    /** 쪽잠 전 값으로 보낸다. 창문을 먼저 닫고, 공조 전원은 마지막에 끈다. [only]가 있으면 그 항목만. */
+    private suspend fun sendRestore(saved: ClimateSnapshot, windowTo: Int?, only: Set<ClimateItem>?) {
+        fun wants(item: ClimateItem) = only == null || item in only
+        if (wants(ClimateItem.WINDOW)) windowTo?.let { vehicle.setDriverWindow(it) }
+        if (wants(ClimateItem.DEFROST)) saved.defroster?.let { vehicle.setDefroster(it) }
+        if (wants(ClimateItem.REAR_DEFROST)) saved.rearDefroster?.let { vehicle.setRearDefroster(it) }
+        if (wants(ClimateItem.STEERING_HEAT)) saved.steeringHeat?.let { vehicle.setSteeringHeat(it) }
+        if (wants(ClimateItem.SEAT_HEAT)) saved.seatHeat?.let { vehicle.setSeatHeat(it) }
+        if (wants(ClimateItem.FAN)) saved.fanSpeed?.let { vehicle.setFanSpeed(it) }
+        if (wants(ClimateItem.TEMPERATURE)) {
+            saved.temperatureC?.let { vehicle.setTemperature(it) }
+            if (saved.dualOn == true) saved.passengerTemperatureC?.let { vehicle.setPassengerTemperature(it) }
+        }
+        if (wants(ClimateItem.AC)) saved.ac?.let { vehicle.setAc(it) }
+        if (wants(ClimateItem.AIR)) saved.recirculation?.let { vehicle.setRecirculation(it) }
+        if (wants(ClimateItem.POWER)) saved.hvacPower?.let { if (!it) vehicle.setHvacPower(false) }
     }
 
     // endregion
@@ -663,5 +750,9 @@ class NapController(
         const val DEMO_CHECK_MS = 4_000L
         /** 창문 전체 이동 범위의 3% ≒ 1~2cm */
         const val WINDOW_GAP_RATIO = 0.03
+        /** 깨울 때 핸들 열선 단계(차 범위 안으로 자름) */
+        const val WAKE_STEERING_HEAT_LEVEL = 2
+        /** 공조가 이만큼 연속 점검에서 꺼져 있으면(다시 켜도) 경보 */
+        const val POWER_OFF_ALERT_CHECKS = 2
     }
 }
