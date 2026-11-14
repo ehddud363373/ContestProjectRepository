@@ -420,11 +420,18 @@ class PleosVehicleGateway(
         (awaitSdk<Boolean> { ok, fail -> call({ ok(true) }, fail) } == true)
             .also { Log.d(TAG, "control $name -> ${if (it) "ok" else "failed"}") }
 
-    /** 콜백 API를 suspend로 바꾼다. 실패·시간 초과·예외는 모두 null. */
+    /**
+     * 콜백 API를 suspend로 바꾼다. 실패·시간 초과·예외는 모두 null.
+     *
+     * 반드시 백그라운드(IO)에서 부른다. Pleos Vehicle SDK는 API를 부를 때마다 권한 확인을 위해
+     * 코틀린 리플렉션(KClass.members + 어노테이션 조회)을 쓰는데, 처음 한 번은 수 초가 걸린다.
+     * 앱의 작업 범위가 Main이라 이걸 메인 스레드에서 하면 화면이 멈춰 ANR이 나고,
+     * Pleos 홈 화면이 앱을 숨기고 내비게이션을 앞으로 올려 버린다(에뮬레이터에서 확인).
+     */
     private suspend fun <T> awaitSdk(
         timeoutMs: Long = SDK_TIMEOUT_MS,
         call: (ok: (T) -> Unit, fail: (Exception) -> Unit) -> Unit,
-    ): T? =
+    ): T? = withContext(Dispatchers.IO) {
         withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<T?> { cont ->
                 try {
@@ -438,6 +445,7 @@ class PleosVehicleGateway(
                 }
             }
         }
+    }
 
     private fun logFailure(what: String, t: Throwable) {
         Log.w(TAG, "$what failed: ${t.javaClass.simpleName} ${t.message}")
