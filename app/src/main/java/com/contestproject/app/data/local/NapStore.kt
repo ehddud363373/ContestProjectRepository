@@ -40,6 +40,9 @@ class PrefsNapStore(context: Context) : NapStore {
         snapshot.temperatureC?.let { putFloat(K_S_TEMP, it) } ?: remove(K_S_TEMP)
         putInt(K_S_FAN, snapshot.fanSpeed)
         putBool(K_S_DEFROST, snapshot.defroster)
+        putBool(K_S_REAR_DEFROST, snapshot.rearDefroster)
+        snapshot.passengerTemperatureC?.let { putFloat(K_S_TEMP2, it) } ?: remove(K_S_TEMP2)
+        putBool(K_S_DUAL, snapshot.dualOn)
         putInt(K_S_SEAT, snapshot.seatHeat)
         putInt(K_S_STEER, snapshot.steeringHeat)
         putInt(K_S_WINDOW, snapshot.driverWindow)
@@ -68,6 +71,9 @@ class PrefsNapStore(context: Context) : NapStore {
             temperatureC = if (prefs.contains(K_S_TEMP)) prefs.getFloat(K_S_TEMP, 0f) else null,
             fanSpeed = int(K_S_FAN),
             defroster = bool(K_S_DEFROST),
+            rearDefroster = bool(K_S_REAR_DEFROST),
+            passengerTemperatureC = if (prefs.contains(K_S_TEMP2)) prefs.getFloat(K_S_TEMP2, 0f) else null,
+            dualOn = bool(K_S_DUAL),
             seatHeat = int(K_S_SEAT),
             steeringHeat = int(K_S_STEER),
             driverWindow = int(K_S_WINDOW),
@@ -131,6 +137,9 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_S_SEAT = "s_seat"
         const val K_S_STEER = "s_steer"
         const val K_S_WINDOW = "s_window"
+        const val K_S_REAR_DEFROST = "s_rear_defrost"
+        const val K_S_TEMP2 = "s_temp_passenger"
+        const val K_S_DUAL = "s_dual"
         const val K_DEMO = "demo_mode"
         const val K_LAST_DURATION = "last_duration"
         const val K_POWERTRAIN_OVERRIDE = "powertrain_override"
@@ -138,6 +147,7 @@ class PrefsNapStore(context: Context) : NapStore {
         val SESSION_KEYS = listOf(
             K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST, K_RECORD,
             K_S_POWER, K_S_RECIRC, K_S_AC, K_S_TEMP, K_S_FAN, K_S_DEFROST, K_S_SEAT, K_S_STEER, K_S_WINDOW,
+            K_S_REAR_DEFROST, K_S_TEMP2, K_S_DUAL,
         )
     }
 }

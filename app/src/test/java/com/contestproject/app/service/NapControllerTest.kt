@@ -52,28 +52,59 @@ class NapControllerTest {
         var ac = false
         var window = 0
         var steeringHeat = 0
+        var rearDefroster = false
+        var hvacPower = true
+        var passengerTemperature = 20f
+        var dualOn: Boolean? = null
         var failRecirculation = false
         var failWindowRead = false
+        // 공조 전원을 켜도 꺼진 채로 남는 차(시동 꺼짐 흉내)
+        var powerStuckOff = false
+        // 다음 온도 설정 요청을 한 번 거부한다(되돌리기 재시도 확인용)
+        var rejectNextTemperature = false
+        var outsideTemp = 31f
+        // 김서림 제거를 켜면 차가 스스로 에어컨을 켜고 바람을 올리는 동작(현대차 공조 흉내)
+        var defrostRaisesAcAndFan = false
 
         override suspend fun connect() {
-            status.update { it.copy(connection = VehicleConnection.Connected, gear = GearState.PARK, outsideTempC = 31f) }
+            status.update { it.copy(connection = VehicleConnection.Connected, gear = GearState.PARK, outsideTempC = outsideTemp) }
         }
         override suspend fun capabilities() = caps
         override suspend fun readCabinTemperature(): Float? = 26.5f
         override suspend fun readClimate() = ClimateSnapshot(
+            hvacPower = hvacPower.takeIf { caps.hvacPower },
             recirculation = recirculation.takeIf { caps.recirculation },
             ac = ac, temperatureC = temperature, fanSpeed = fan, defroster = defroster,
+            rearDefroster = rearDefroster.takeIf { caps.rearDefroster },
+            steeringHeat = steeringHeat.takeIf { caps.steeringHeat != null },
             driverWindow = window.takeIf { caps.driverWindow != null && !failWindowRead },
+            passengerTemperatureC = passengerTemperature.takeIf { caps.passengerTemperature },
+            dualOn = dualOn.takeIf { caps.dual },
         )
-        override suspend fun setHvacPower(on: Boolean) = true
+        override suspend fun setHvacPower(on: Boolean): Boolean { if (!powerStuckOff) hvacPower = on; return true }
         override suspend fun setRecirculation(on: Boolean): Boolean {
             if (!caps.recirculation || failRecirculation) return false
             recirculation = on; return true
         }
         override suspend fun setAc(on: Boolean): Boolean { ac = on; return true }
-        override suspend fun setTemperature(celsius: Float): Boolean { temperature = celsius; return true }
+        override suspend fun setTemperature(celsius: Float): Boolean {
+            if (rejectNextTemperature) { rejectNextTemperature = false; return false }
+            temperature = celsius; return true
+        }
+        override suspend fun setPassengerTemperature(celsius: Float): Boolean {
+            if (!caps.passengerTemperature) return false
+            passengerTemperature = celsius; return true
+        }
         override suspend fun setFanSpeed(level: Int): Boolean { fan = level; return true }
-        override suspend fun setDefroster(on: Boolean): Boolean { defroster = on; return true }
+        override suspend fun setDefroster(on: Boolean): Boolean {
+            defroster = on
+            if (on && defrostRaisesAcAndFan) { ac = true; fan = 6 }
+            return true
+        }
+        override suspend fun setRearDefroster(on: Boolean): Boolean {
+            if (!caps.rearDefroster) return false
+            rearDefroster = on; return true
+        }
         override suspend fun setSeatHeat(level: Int) = true
         override suspend fun setSteeringHeat(level: Int): Boolean { steeringHeat = level; return true }
         override suspend fun setDriverWindow(position: Int): Boolean {
@@ -120,8 +151,15 @@ class NapControllerTest {
 
     private class Rig(val car: FakeCar, val voice: FakeVoice, val store: MemoryStore, val controller: NapController)
 
-    private fun TestScope.rig(caps: ClimateCapabilities = fullCaps, store: MemoryStore = MemoryStore()): Rig {
+    private fun TestScope.rig(
+        caps: ClimateCapabilities = fullCaps,
+        store: MemoryStore = MemoryStore(),
+        outsideTemp: Float = 31f,
+        setup: (FakeCar) -> Unit = {},
+    ): Rig {
         val car = FakeCar(caps)
+        car.outsideTemp = outsideTemp
+        setup(car)
         val voice = FakeVoice()
         val controller = NapController(car, voice, store, Lines, backgroundScope, clock = { testScheduler.currentTime })
         controller.start()
@@ -530,4 +568,203 @@ class NapControllerTest {
         assertNull(r.store.record)
         assertNull(r.controller.monitor.value.readAtMs)
     }
+
+    // region 공조·김서림 보완 (2026-11-15)
+
+    @Test
+    fun `김서림 제거 중에는 차가 켠 에어컨과 올린 바람을 되돌리지 않는다`() = runTest {
+        val r = rig(outsideTemp = 18f) { it.defrostRaisesAcAndFan = true } // 봄가을: 쉬는 동안 에어컨 끔
+        r.controller.startNap(15)
+        runCurrent()
+        assertFalse(r.car.ac)
+
+        advanceTimeBy(12 * minute + 600)
+        assertTrue(r.controller.state.value is NapState.PreWake)
+        assertTrue(r.car.defroster)
+        assertTrue(r.car.ac)
+        assertEquals(6, r.car.fan)
+
+        advanceTimeBy(30_000) // 점검 여러 번
+        assertTrue("김서림 제거 중 에어컨은 차에 맡긴다", r.car.ac)
+        assertEquals("더 센 바람은 그대로 둔다", 6, r.car.fan)
+
+        r.car.fan = 2
+        advanceTimeBy(11_000)
+        assertEquals("약해지면 깨우기 풍량까지는 올린다", 4, r.car.fan)
+
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertFalse(r.car.ac)
+        assertFalse(r.car.defroster)
+        assertEquals(1, r.car.fan)
+    }
+
+    @Test
+    fun `뒷유리 열선도 깨우기 3분 전에 켜고 지키다가 출발할 때 끈다`() = runTest {
+        val r = rig(caps = fullCaps.copy(rearDefroster = true))
+        r.controller.startNap(15)
+        runCurrent()
+        assertFalse(r.car.rearDefroster)
+
+        advanceTimeBy(12 * minute + 600)
+        assertTrue(r.car.rearDefroster)
+        r.car.rearDefroster = false
+        advanceTimeBy(11_000)
+        assertTrue(r.car.rearDefroster)
+
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertFalse(r.car.rearDefroster)
+    }
+
+    @Test
+    fun `앞 유리 김서림이 안 되는 차도 뒷유리 열선만으로 김서림 단계를 진행한다`() = runTest {
+        val r = rig(caps = fullCaps.copy(defroster = false, rearDefroster = true))
+        r.controller.startNap(15)
+        runCurrent()
+        advanceTimeBy(12 * minute + 600)
+        assertTrue(r.car.rearDefroster)
+        assertFalse(r.car.defroster)
+        assertTrue(r.controller.monitor.value.record.defrostStartedAtMs != null)
+    }
+
+    @Test
+    fun `겨울 핸들 열선은 화면 예정값과 같은 단계로 켜고 꺼지면 다시 켠다`() = runTest {
+        val r = rig(caps = fullCaps.copy(steeringHeat = 0..3), outsideTemp = 5f)
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(2, r.controller.monitor.value.wakePlan.steeringHeat)
+
+        advanceTimeBy(12 * minute + 600)
+        assertEquals(2, r.car.steeringHeat)
+        r.car.steeringHeat = 0
+        advanceTimeBy(11_000)
+        assertEquals(2, r.car.steeringHeat)
+
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertEquals(0, r.car.steeringHeat)
+    }
+
+    @Test
+    fun `공조를 다시 켜도 계속 꺼져 있으면 시동이 꺼진 것으로 보고 깨운다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        r.car.powerStuckOff = true
+        r.car.hvacPower = false
+
+        advanceTimeBy(11_000) // 한 번 꺼짐: 다시 켜 보고 기다린다
+        assertTrue(r.controller.state.value is NapState.Resting)
+        advanceTimeBy(10_000) // 두 번 연속
+        val alert = r.controller.state.value as NapState.Alert
+        assertEquals(AlertReason.CLIMATE_OFF, alert.reason)
+    }
+
+    @Test
+    fun `공조가 잠깐 꺼졌다 다시 켜지면 경보 없이 계속 쉰다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        r.car.hvacPower = false // 다시 켜면 켜지는 차
+        advanceTimeBy(31_000)
+        assertTrue(r.car.hvacPower)
+        assertTrue(r.controller.state.value is NapState.Resting)
+    }
+
+    @Test
+    fun `창문 틈으로 쉬는 중 와이퍼가 움직이면 창문을 닫고 깨운다`() = runTest {
+        val r = rig(caps = fullCaps.copy(recirculation = false))
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(3, r.car.window)
+
+        r.car.events.emit(VehicleEvent.WiperChanged(on = true))
+        runCurrent()
+        assertEquals(0, r.car.window)
+        assertEquals(AlertReason.RAIN, (r.controller.state.value as NapState.Alert).reason)
+        advanceTimeBy(21_000)
+        assertEquals("닫은 창문을 점검이 다시 열지 않는다", 0, r.car.window)
+    }
+
+    @Test
+    fun `와이퍼가 움직이는 중에는 창문을 열어 시작하지 않는다`() = runTest {
+        val r = rig(caps = fullCaps.copy(recirculation = false))
+        r.car.status.update { it.copy(wiperOn = true) }
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(NapState.Idle, r.controller.state.value)
+        assertEquals(0, r.car.window)
+    }
+
+    @Test
+    fun `되돌릴 때 차가 한 번 거부한 항목은 다시 읽고 한 번 더 보낸다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(24f, r.car.temperature)
+
+        r.car.rejectNextTemperature = true
+        r.controller.wakeNow()
+        runCurrent()
+        r.car.rejectNextTemperature = true
+        r.controller.depart()
+        runCurrent()
+        assertEquals(20f, r.car.temperature)
+    }
+
+    @Test
+    fun `듀얼 공조가 켜진 차는 동승석 온도도 같이 맞추고 되돌린다`() = runTest {
+        val r = rig(caps = fullCaps.copy(dual = true, passengerTemperature = true)) { it.dualOn = true }
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(24f, r.car.passengerTemperature)
+
+        r.car.passengerTemperature = 18f
+        advanceTimeBy(11_000)
+        assertEquals(24f, r.car.passengerTemperature)
+
+        r.controller.wakeNow()
+        runCurrent()
+        r.controller.depart()
+        runCurrent()
+        assertEquals(20f, r.car.passengerTemperature)
+    }
+
+    @Test
+    fun `듀얼 공조가 꺼진 차는 동승석 온도를 따로 건드리지 않는다`() = runTest {
+        val r = rig(caps = fullCaps.copy(dual = true, passengerTemperature = true)) { it.dualOn = false }
+        r.controller.startNap(15)
+        runCurrent()
+        assertEquals(20f, r.car.passengerTemperature)
+    }
+
+    @Test
+    fun `연장하면 김서림 제거와 뒷유리 열선을 끄고 쉬는 동안의 에어컨 설정을 다시 지킨다`() = runTest {
+        val r = rig(caps = fullCaps.copy(rearDefroster = true), outsideTemp = 18f) { it.defrostRaisesAcAndFan = true }
+        r.controller.startNap(15)
+        runCurrent()
+        advanceTimeBy(15 * minute + 600)
+        r.controller.acknowledgeWake()
+        r.controller.extend(10)
+        runCurrent()
+        assertFalse(r.car.defroster)
+        assertFalse(r.car.rearDefroster)
+        assertFalse(r.car.ac)
+        assertEquals(2, r.car.fan)
+
+        r.car.ac = true
+        r.car.fan = 6
+        advanceTimeBy(11_000)
+        assertFalse("쉬는 동안엔 다시 에어컨 끔을 지킨다", r.car.ac)
+        assertEquals(2, r.car.fan)
+    }
+
+    // endregion
 }

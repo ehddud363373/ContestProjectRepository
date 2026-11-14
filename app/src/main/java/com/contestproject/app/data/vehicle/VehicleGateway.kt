@@ -23,6 +23,9 @@ interface VehicleGateway {
     suspend fun setTemperature(celsius: Float): Boolean
     suspend fun setFanSpeed(level: Int): Boolean
     suspend fun setDefroster(on: Boolean): Boolean
+    suspend fun setRearDefroster(on: Boolean): Boolean
+    /** 동승석 온도. 듀얼 공조가 꺼져 있으면 운전석 온도가 차 전체에 적용되므로 부를 필요가 없다. */
+    suspend fun setPassengerTemperature(celsius: Float): Boolean
     suspend fun setSeatHeat(level: Int): Boolean
     suspend fun setSteeringHeat(level: Int): Boolean
     suspend fun setDriverWindow(position: Int): Boolean

@@ -22,7 +22,12 @@ data class WakeStep(
     val doneAtMs: Long? = null,
 )
 
-enum class AlertReason { VEHICLE_WARNING, FRESH_AIR_LOST, NO_RESPONSE }
+/**
+ * 경보 이유.
+ * CLIMATE_OFF: 공조가 꺼졌는데 다시 켜지지 않음(내연기관은 시동이 꺼지면 이렇게 된다. 엔진 상태는 공개 API로 읽을 수 없다).
+ * RAIN: 창문 틈으로 바깥 공기를 넣던 중 와이퍼가 움직여(비) 창문을 닫음 → 바깥 공기가 끊김.
+ */
+enum class AlertReason { VEHICLE_WARNING, FRESH_AIR_LOST, NO_RESPONSE, CLIMATE_OFF, RAIN }
 
 sealed interface NapState {
     data object Idle : NapState

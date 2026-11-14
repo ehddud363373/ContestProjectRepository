@@ -19,7 +19,7 @@ data class NapEvent(val atMs: Long, val kind: Kind, val item: ClimateItem? = nul
     }
 }
 
-enum class ClimateItem { POWER, AIR, AC, TEMPERATURE, FAN, DEFROST, SEAT_HEAT, WINDOW }
+enum class ClimateItem { POWER, AIR, AC, TEMPERATURE, FAN, DEFROST, SEAT_HEAT, WINDOW, REAR_DEFROST, STEERING_HEAT }
 
 /**
  * 쪽잠 한 번(연장 포함)의 누적 기록. 차가 꺼졌다 켜져도 리포트가 이어지도록 저장한다.
@@ -96,17 +96,27 @@ data class NapMonitor(
 object ClimateCheck {
     private const val TEMP_TOLERANCE_C = 0.25f
 
-    fun mismatches(target: ClimateSnapshot, reading: ClimateSnapshot): List<ClimateItem> = buildList {
+    /**
+     * @param fanAtLeast true면 풍량은 '이 단계 이상'만 지킨다. 김서림 제거 중에는 차가 스스로 바람을 올리므로
+     *   더 센 바람은 그대로 두고, 약해졌을 때만 다시 맞춘다.
+     */
+    fun mismatches(target: ClimateSnapshot, reading: ClimateSnapshot, fanAtLeast: Boolean = false): List<ClimateItem> = buildList {
         fun <T> differs(want: T?, got: T?) = want != null && got != null && want != got
+        fun tempDiffers(want: Float?, got: Float?) = want != null && got != null && kotlin.math.abs(want - got) > TEMP_TOLERANCE_C
         if (differs(target.hvacPower, reading.hvacPower)) add(ClimateItem.POWER)
         if (differs(target.recirculation, reading.recirculation)) add(ClimateItem.AIR)
         if (differs(target.ac, reading.ac)) add(ClimateItem.AC)
-        val t = target.temperatureC
-        val r = reading.temperatureC
-        if (t != null && r != null && kotlin.math.abs(t - r) > TEMP_TOLERANCE_C) add(ClimateItem.TEMPERATURE)
-        if (differs(target.fanSpeed, reading.fanSpeed)) add(ClimateItem.FAN)
+        if (tempDiffers(target.temperatureC, reading.temperatureC) ||
+            tempDiffers(target.passengerTemperatureC, reading.passengerTemperatureC)
+        ) add(ClimateItem.TEMPERATURE)
+        val wantFan = target.fanSpeed
+        val gotFan = reading.fanSpeed
+        val fanOff = if (fanAtLeast) wantFan != null && gotFan != null && gotFan < wantFan else differs(wantFan, gotFan)
+        if (fanOff) add(ClimateItem.FAN)
         if (differs(target.defroster, reading.defroster)) add(ClimateItem.DEFROST)
+        if (differs(target.rearDefroster, reading.rearDefroster)) add(ClimateItem.REAR_DEFROST)
         if (differs(target.seatHeat, reading.seatHeat)) add(ClimateItem.SEAT_HEAT)
+        if (differs(target.steeringHeat, reading.steeringHeat)) add(ClimateItem.STEERING_HEAT)
         // 창문은 '틈이 열려 있는지'만 본다(차마다 단계가 달라 정확한 값 비교는 하지 않는다).
         val w = target.driverWindow
         val rw = reading.driverWindow
