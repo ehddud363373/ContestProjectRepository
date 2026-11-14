@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -200,21 +199,60 @@ fun SecondaryButton(
     }
 }
 
-/** 15분 / 20분 같은 선택지 */
+/**
+ * [ − ]  15분  [ + ] 시간 고르기. 차 화면에서는 슬라이더보다 큰 버튼이 정확히 누르기 쉽다.
+ * 끝에 닿으면 그쪽 버튼을 끈다(범위를 벗어난 값은 만들 수 없다).
+ */
 @Composable
-fun RowScope.ChoiceButton(text: String, selected: Boolean, onClick: () -> Unit, height: Dp = 72.dp) {
+fun MinuteStepper(
+    value: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    minusEnabled: Boolean,
+    plusEnabled: Boolean,
+    minusDescription: String,
+    plusDescription: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 72.dp,
+) {
     val colors = Shimpyo.colors
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.weight(1f).height(height).semantics { this.selected = selected },
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.accent else colors.border),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) colors.accentContainer else colors.surface,
-            contentColor = if (selected) colors.accentText else colors.textSecondary,
-        ),
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(16.dp))
+            .border(2.dp, colors.accent, RoundedCornerShape(16.dp))
+            .background(colors.accentContainer),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+        StepperButton("−", minusDescription, minusEnabled, onMinus, height)
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.accentText,
+            textAlign = TextAlign.Center,
+        )
+        StepperButton("+", plusDescription, plusEnabled, onPlus, height)
+    }
+}
+
+@Composable
+private fun StepperButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit, size: Dp) {
+    val colors = Shimpyo.colors
+    Box(
+        Modifier
+            .size(size)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            symbol,
+            style = MaterialTheme.typography.headlineMedium,
+            color = if (enabled) colors.accentText else colors.accentText.copy(alpha = 0.3f),
+        )
     }
 }
 

@@ -30,8 +30,8 @@ import com.contestproject.app.domain.ClimatePlanner
 import com.contestproject.app.domain.NapPolicy
 import com.contestproject.app.domain.Season
 import com.contestproject.app.presentation.component.CheckRow
-import com.contestproject.app.presentation.component.ChoiceButton
 import com.contestproject.app.presentation.component.CommaMark
+import com.contestproject.app.presentation.component.MinuteStepper
 import com.contestproject.app.presentation.component.Panel
 import com.contestproject.app.presentation.component.PanelLabel
 import com.contestproject.app.presentation.component.PrimaryButton
@@ -77,15 +77,7 @@ fun ReadyScreen(
                     color = Shimpyo.colors.textPrimary,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NapPolicy.DURATION_OPTIONS_MIN.forEach { minutes ->
-                    ChoiceButton(
-                        text = stringResource(R.string.minutes, minutes),
-                        selected = minutes == selectedMinutes,
-                        onClick = { onSelectMinutes(minutes) },
-                    )
-                }
-            }
+            DurationPicker(selectedMinutes, onSelectMinutes)
             PrimaryButton(
                 text = when {
                     !parked -> stringResource(R.string.start_needs_park)
@@ -246,5 +238,32 @@ private fun CenteredMessage(content: @Composable () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) { content() }
+    }
+}
+
+/** 쪽잠 길이 고르기: 10~30분, 5분 단위. 권장 범위와 긴 쪽잠 주의를 바로 아래에 보여 준다. */
+@Composable
+private fun DurationPicker(selectedMinutes: Int, onSelectMinutes: (Int) -> Unit) {
+    val colors = Shimpyo.colors
+    val step = NapPolicy.DURATION_STEP_MIN
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        MinuteStepper(
+            value = stringResource(R.string.minutes, selectedMinutes),
+            onMinus = { onSelectMinutes(selectedMinutes - step) },
+            onPlus = { onSelectMinutes(selectedMinutes + step) },
+            minusEnabled = selectedMinutes - step >= NapPolicy.MIN_DURATION_MIN,
+            plusEnabled = selectedMinutes + step <= NapPolicy.MAX_DURATION_MIN,
+            minusDescription = stringResource(R.string.stepper_less, step),
+            plusDescription = stringResource(R.string.stepper_more, step),
+        )
+        val recommended = NapPolicy.RECOMMENDED_DURATION_MIN
+        val (hint, color) = when {
+            selectedMinutes >= NapPolicy.LONG_NAP_FROM_MIN -> stringResource(R.string.duration_hint_long) to colors.cautionTitle
+            selectedMinutes in recommended -> stringResource(R.string.duration_hint_recommended, recommended.first, recommended.last) to colors.check
+            else -> stringResource(
+                R.string.duration_hint_range, recommended.first, recommended.last, NapPolicy.MIN_DURATION_MIN, NapPolicy.MAX_DURATION_MIN,
+            ) to colors.textSecondary
+        }
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = color)
     }
 }

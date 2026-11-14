@@ -156,7 +156,7 @@ class NapControllerTest {
 
         r.controller.acknowledgeWake()
         val check = r.controller.state.value as NapState.DepartCheck
-        assertTrue(check.canExtend)
+        assertEquals(15, check.maxExtensionMin) // 15분 쉬었으니 30분까지 15분 남음
         assertEquals(15, check.restedMinutes)
 
         r.controller.depart()
@@ -256,29 +256,73 @@ class NapControllerTest {
     }
 
     @Test
-    fun `연장은 한 번만 되고 두 번째 깨우기에서는 막힌다`() = runTest {
+    fun `연장은 고른 길이만큼 되고 합쳐서 30분이 되면 막힌다`() = runTest {
         val r = rig()
         r.controller.startNap(15)
         runCurrent()
         advanceTimeBy(15 * minute + 600)
         r.controller.acknowledgeWake()
 
-        r.controller.extend()
+        // 최대(15분)를 넘는 길이는 받지 않는다
+        r.controller.extend(20)
+        runCurrent()
+        assertTrue(r.controller.state.value is NapState.DepartCheck)
+
+        r.controller.extend(10)
         runCurrent()
         val resting = r.controller.state.value as NapState.Resting
         assertTrue(resting.session.extensionUsed)
+        assertEquals(10, resting.session.plannedMinutes)
+        assertEquals("extend 10", r.voice.spoken.last())
         assertFalse(r.car.defroster) // 다시 쉬는 동안은 김서림 제거를 끈다
         assertEquals(2, r.car.fan)
 
         advanceTimeBy(10 * minute + 600)
+        assertEquals("wake 25", r.voice.spoken.last()) // 연장까지 합친 시간으로 말한다
         r.controller.acknowledgeWake()
-        val check = r.controller.state.value as NapState.DepartCheck
-        assertFalse(check.canExtend)
-        assertEquals(25, check.restedMinutes) // 15분 + 연장 10분
+        val second = r.controller.state.value as NapState.DepartCheck
+        assertEquals(25, second.restedMinutes) // 15분 + 연장 10분
+        assertEquals(5, second.maxExtensionMin)
 
-        r.controller.extend()
+        r.controller.extend(5)
+        runCurrent()
+        advanceTimeBy(5 * minute + 600)
+        r.controller.acknowledgeWake()
+        val third = r.controller.state.value as NapState.DepartCheck
+        assertEquals(30, third.restedMinutes)
+        assertEquals(0, third.maxExtensionMin)
+
+        r.controller.extend(5)
         runCurrent()
         assertTrue(r.controller.state.value is NapState.DepartCheck)
+    }
+
+    @Test
+    fun `출발 확인 화면에 오래 머물러도 연장 상한은 깬 시각 기준이다`() = runTest {
+        val r = rig()
+        r.controller.startNap(15)
+        runCurrent()
+        advanceTimeBy(7 * minute)
+        r.controller.wakeNow()
+        runCurrent()
+        val check = r.controller.state.value as NapState.DepartCheck
+        assertEquals(20, check.maxExtensionMin) // 7분 사용 → 23분 남음 → 5분 단위로 20분
+
+        advanceTimeBy(5 * minute) // 화면에 5분 머묾
+        r.controller.extend(20)
+        runCurrent()
+        val resting = r.controller.state.value as NapState.Resting
+        assertEquals(20, resting.session.plannedMinutes)
+        assertTrue(resting.session.totalPlannedMinutes <= NapPolicy.MAX_DURATION_MIN)
+    }
+
+    @Test
+    fun `범위를 벗어난 쪽잠 길이로는 시작하지 않는다`() = runTest {
+        val r = rig()
+        r.controller.startNap(35)
+        r.controller.startNap(12)
+        runCurrent()
+        assertEquals(NapState.Idle, r.controller.state.value)
     }
 
     @Test
@@ -310,7 +354,7 @@ class NapControllerTest {
 
         r.controller.acknowledgeWake()
         val check = r.controller.state.value as NapState.DepartCheck
-        assertFalse(check.canExtend) // 경고 뒤에는 더 자지 않게
+        assertEquals(0, check.maxExtensionMin) // 경고 뒤에는 더 자지 않게
     }
 
     @Test
@@ -368,6 +412,25 @@ class NapControllerTest {
         runCurrent()
         assertTrue(r.car.recirculation)
         assertEquals(20f, r.car.temperature)
+    }
+
+    @Test
+    fun `차가 오래 꺼졌다 켜지면 지난 쪽잠은 깨우지 않고 공조만 되돌린다`() = runTest {
+        val store = MemoryStore().apply {
+            saved = NapSession.start(0, 15) to ClimateSnapshot(recirculation = true, temperatureC = 20f, fanSpeed = 1)
+            record = NapRecord()
+        }
+        // 깨울 시각(15분)에서 31분 더 지나 차가 켜짐
+        advanceTimeBy((15 + NapPolicy.STALE_AFTER_END_MIN + 1) * minute)
+        val r = rig(store = store)
+
+        assertEquals(NapState.Idle, r.controller.state.value)
+        assertTrue(r.voice.spoken.isEmpty()) // 깨우는 말을 하지 않는다
+        assertTrue(r.car.recirculation) // 쪽잠 전 값으로 되돌림
+        assertEquals(20f, r.car.temperature)
+        assertEquals(1, r.car.fan)
+        assertNull(store.saved)
+        assertNull(store.record)
     }
 
     @Test

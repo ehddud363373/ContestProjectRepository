@@ -24,6 +24,11 @@
     <string name="start_nap">쪽잠 시작</string>
     <string name="start_needs_park">P단에서 시작할 수 있어요</string>
     <string name="start_unavailable">이 차에서는 시작할 수 없어요</string>
+    <string name="stepper_less">%1$d분 줄이기</string>
+    <string name="stepper_more">%1$d분 늘리기</string>
+    <string name="duration_hint_recommended">권장 시간이에요 · %1$d~%2$d분</string>
+    <string name="duration_hint_range">권장 %1$d~%2$d분 · %3$d~%4$d분 사이로 정할 수 있어요</string>
+    <string name="duration_hint_long">길게 자면 깬 뒤 잠시 멍할 수 있어요. 몇 분 걷고 출발하세요</string>
     <string name="ready_auto_title">시작하면 차가 알아서 해요</string>
     <string name="ready_auto_outside_air">바깥 공기로 바꾸고 약한 바람</string>
     <string name="ready_auto_window_gap">창문을 1~2cm 열어 바깥 공기 유지</string>
@@ -142,11 +147,13 @@
     <string name="wake_call_alert_note">%1$d번 불러도 반응이 없으면 경보로 바꿔요</string>
 
     <!-- 출발 전 확인 -->
-    <string name="depart_headline">아직 졸려요?</string>
+    <string name="depart_headline">아직 피곤하신가요?</string>
     <string name="depart_body">졸리면 조금 더 쉬었다 가세요</string>
     <string name="depart_extend">%1$d분 더</string>
-    <string name="depart_extend_once">한 번만 쓸 수 있어요</string>
-    <string name="depart_extend_used">연장은 이미 썼어요</string>
+    <string name="depart_extend_none">더 쉴 수 없어요</string>
+    <string name="depart_extend_total">합쳐서 %1$d분 · 최대 %2$d분</string>
+    <string name="depart_extend_full">최대 %1$d분을 다 쉬었어요</string>
+    <string name="depart_extend_blocked">차량 경고 뒤에는 더 쉴 수 없어요</string>
     <string name="depart_go">괜찮아요 · 출발</string>
     <string name="depart_summary_title">이번 쪽잠</string>
     <string name="depart_restore_title">출발을 누르면 되돌리는 값</string>
@@ -185,12 +192,13 @@
     <!-- 안내 -->
     <string name="notice_ended_by_gear">기어가 P에서 벗어나 쪽잠을 끝내고 공조를 되돌렸어요</string>
     <string name="notice_resumed">차가 다시 켜져서 쪽잠을 이어 가요</string>
+    <string name="notice_ended_while_off">지난 쪽잠은 차가 꺼진 사이 끝나서, 깨우지 않고 공조만 되돌렸어요</string>
     <string name="notice_start_failed">바깥 공기로 바꾸지 못해서 쪽잠을 시작하지 않았어요</string>
     <string name="notice_departed">공조를 원래대로 되돌렸어요. 조심히 가세요</string>
 
     <!-- 음성 -->
     <string name="voice_start">%1$d분 뒤에 깨워 드릴게요. 편히 쉬세요.</string>
-    <string name="voice_extend">%1$d분 더 쉬어요. 이번이 마지막이에요.</string>
+    <string name="voice_extend">%1$d분 더 쉬어요. 편히 쉬세요.</string>
     <string name="voice_wake">%1$d분 지났어요. 천천히 일어나세요.</string>
     <string name="voice_wake_repeat">일어날 시간이에요. 화면의 일어났어요를 눌러 주세요.</string>
     <string name="voice_alert_vehicle">차량 경고가 켜졌어요. 일어나서 계기판을 확인해 주세요.</string>

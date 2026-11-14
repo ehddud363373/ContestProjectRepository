@@ -54,7 +54,10 @@ sealed interface NapState {
     data class DepartCheck(
         override val session: NapSession,
         val restedMinutes: Int,
-        val canExtend: Boolean,
+        /** 깬 시각. 연장 상한은 이 시각까지 쉰 시간으로 센다. */
+        val awakeAtMs: Long,
+        /** 지금 연장할 수 있는 최대 분. 0이면 연장 불가(최대 시간에 닿았거나 차량 경고 뒤). */
+        val maxExtensionMin: Int,
     ) : Active
 
     data class Alert(
@@ -65,4 +68,4 @@ sealed interface NapState {
 }
 
 /** 화면 위에 잠깐 띄우는 안내 */
-enum class NapNotice { ENDED_BY_GEAR, RESUMED_AFTER_RESTART, START_FAILED, DEPARTED }
+enum class NapNotice { ENDED_BY_GEAR, RESUMED_AFTER_RESTART, ENDED_WHILE_OFF, START_FAILED, DEPARTED }
