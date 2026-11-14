@@ -3,6 +3,7 @@ package com.contestproject.app.data.local
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.contestproject.app.BuildConfig
 import com.contestproject.app.data.vehicle.ClimateSnapshot
 import com.contestproject.app.domain.NapPolicy
 import com.contestproject.app.domain.NapRecord
@@ -80,7 +81,8 @@ class PrefsNapStore(context: Context) : NapStore {
     }
 
     override var demoMode: Boolean
-        get() = prefs.getBoolean(K_DEMO, false)
+        // 출시 전 개발 중에는 디버그 빌드를 시연 모드로 시작한다(릴리스는 기존처럼 꺼진 채 시작).
+        get() = prefs.getBoolean(K_DEMO, BuildConfig.DEBUG)
         set(value) = prefs.edit { putBoolean(K_DEMO, value) }
 
     override var lastDurationMin: Int

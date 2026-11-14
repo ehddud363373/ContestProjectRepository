@@ -122,7 +122,7 @@ private fun ReadyHeader(
 ) {
     TopLine(
         left = {
-            // 시연용 압축 모드(1분=4초): 앱 이름을 길게 눌러 켠다. 심사·PT에서 15분을 기다릴 수 없어 릴리스에도 둔다.
+            // 시연용 압축 모드(1분=3초): 앱 이름을 길게 눌러 켠다. 심사·PT에서 15분을 기다릴 수 없어 릴리스에도 둔다.
             // 켜져 있으면 상단에 "시연 모드" 칩이 항상 보여 모르고 켜 둘 일이 없다.
             Row(
                 modifier = Modifier.combinedClickable(onClick = {}, onLongClick = onToggleDemo),
@@ -241,7 +241,7 @@ private fun CenteredMessage(content: @Composable () -> Unit) {
     }
 }
 
-/** 쪽잠 길이 고르기: 10~30분, 5분 단위. 권장 범위와 긴 쪽잠 주의를 바로 아래에 보여 준다. */
+/** 쪽잠 길이 고르기: 10~30분, 1분 단위. +/−를 누르고 있으면 계속 바뀐다. 권장 범위와 긴 쪽잠 주의를 바로 아래에 보여 준다. */
 @Composable
 private fun DurationPicker(selectedMinutes: Int, onSelectMinutes: (Int) -> Unit) {
     val colors = Shimpyo.colors

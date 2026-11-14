@@ -306,7 +306,7 @@ class NapControllerTest {
         r.controller.wakeNow()
         runCurrent()
         val check = r.controller.state.value as NapState.DepartCheck
-        assertEquals(20, check.maxExtensionMin) // 7분 사용 → 23분 남음 → 5분 단위로 20분
+        assertEquals(23, check.maxExtensionMin) // 7분 사용 → 23분 남음 → 1분 단위라 23분
 
         advanceTimeBy(5 * minute) // 화면에 5분 머묾
         r.controller.extend(20)
@@ -320,7 +320,7 @@ class NapControllerTest {
     fun `범위를 벗어난 쪽잠 길이로는 시작하지 않는다`() = runTest {
         val r = rig()
         r.controller.startNap(35)
-        r.controller.startNap(12)
+        r.controller.startNap(9)
         runCurrent()
         assertEquals(NapState.Idle, r.controller.state.value)
     }

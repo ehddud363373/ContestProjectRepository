@@ -20,9 +20,9 @@ class NapSessionTest {
     }
 
     @Test
-    fun `쪽잠은 10~30분 5분 단위만 시작할 수 있다`() {
-        listOf(10, 15, 20, 25, 30).forEach { NapSession.start(0, it) }
-        listOf(5, 9, 12, 31, 35).forEach { m ->
+    fun `쪽잠은 10~30분 1분 단위로 시작할 수 있다`() {
+        (10..30).forEach { NapSession.start(0, it) }
+        listOf(0, 5, 9, 31, 35).forEach { m ->
             assertThrows(IllegalArgumentException::class.java) { NapSession.start(0, m) }
         }
     }
@@ -53,11 +53,13 @@ class NapSessionTest {
     @Test
     fun `일찍 깨면 실제로 쉰 시간만 빼고 연장할 수 있다`() {
         val s = NapSession.start(0, 20)
-        // 7분째에 깸 → 7분 사용, 23분 남음 → 5분 단위로 20분까지
-        assertEquals(20, s.maxExtensionMinutes(7 * minute))
+        // 7분째에 깸 → 7분 사용, 23분 남음 → 1분 단위라 23분까지
+        assertEquals(23, s.maxExtensionMinutes(7 * minute))
         // 7분 30초에 깨면 올림으로 8분을 쓴 것으로 센다(초가 쌓여 30분을 넘지 않게)
-        assertEquals(20, s.maxExtensionMinutes(7 * minute + 30_000))
-        assertEquals(15, s.maxExtensionMinutes(10 * minute + 1))
+        assertEquals(22, s.maxExtensionMinutes(7 * minute + 30_000))
+        assertEquals(19, s.maxExtensionMinutes(10 * minute + 1))
+        // 남은 시간이 최소 연장(5분)보다 적으면 연장할 수 없다
+        assertEquals(0, NapSession.start(0, 26).maxExtensionMinutes(26 * minute))
     }
 
     @Test
@@ -79,10 +81,10 @@ class NapSessionTest {
     }
 
     @Test
-    fun `시연 모드는 1분이 4초`() {
+    fun `시연 모드는 1분이 3초(실제 1초 = 20초)`() {
         val s = NapSession.start(0, 15, NapPolicy.DEMO_MINUTE_MS)
         assertTrue(s.isDemo)
-        assertEquals(60_000L, s.endAtMs)
-        assertEquals(NapPhase.PRE_WAKE, s.phaseAt(48_000))
+        assertEquals(45_000L, s.endAtMs)
+        assertEquals(NapPhase.PRE_WAKE, s.phaseAt(36_000))
     }
 }

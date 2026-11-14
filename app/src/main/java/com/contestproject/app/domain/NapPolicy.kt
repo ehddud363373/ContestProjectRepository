@@ -11,15 +11,19 @@ object NapPolicy {
      */
     const val MIN_DURATION_MIN = 10
     const val MAX_DURATION_MIN = 30
-    const val DURATION_STEP_MIN = 5
+    /** 1분 단위: 사용자가 쉴 수 있는 시간(휴게소 출발 시각 등)에 맞춰 정확히 고르게. */
+    const val DURATION_STEP_MIN = 1
     const val DEFAULT_DURATION_MIN = 15
     val RECOMMENDED_DURATION_MIN = 15..20
     /** 이 길이 이상이면 시작 전에 "깬 뒤 잠시 멍할 수 있어요"를 보여 준다. */
     const val LONG_NAP_FROM_MIN = 25
 
-    /** 연장 길이(분). 앞서 쉰 시간과 합쳐 MAX_DURATION_MIN을 넘지 않는 안에서 STEP 단위로 고른다. */
+    /**
+     * 연장 길이(분). 앞서 쉰 시간과 합쳐 MAX_DURATION_MIN을 넘지 않는 안에서 STEP 단위로 고른다.
+     * 최소 5분: 1~4분 더 누워 있는 건 쉬는 효과가 거의 없고 기상 연출(3분)만 반복된다.
+     */
     const val MIN_EXTENSION_MIN = 5
-    const val EXTENSION_STEP_MIN = 5
+    const val EXTENSION_STEP_MIN = 1
     const val DEFAULT_EXTENSION_MIN = 5
 
     fun isValidDuration(minutes: Int): Boolean =
@@ -40,6 +44,9 @@ object NapPolicy {
     const val ALERT_SNOOZE_SEC = 60
 
     const val MINUTE_MS = 60_000L
-    /** 시연 영상용: 1분을 4초로 줄여 15분 쪽잠을 1분에 보여 준다. 디버그 빌드에서만 켤 수 있다. */
-    const val DEMO_MINUTE_MS = 4_000L
+    /**
+     * 시연·개발용 압축 시간: 1분을 3초로 줄인다(실제 1초 = 쪽잠 20초, 15분 쪽잠이 45초).
+     * 디버그 빌드는 처음부터 켜져 있고, 릴리스는 앱 이름을 길게 눌러야 켜진다.
+     */
+    const val DEMO_MINUTE_MS = 3_000L
 }
