@@ -37,3 +37,6 @@ docs/
 
 # Claude 작업 규칙 파일은 내 컴퓨터에만 둠
 CLAUDE.md
+
+# md 파일은 GitHub에 올리지 않음 (내 컴퓨터에만 둠)
+*.md
