@@ -30,8 +30,7 @@ Thumbs.db
 hs_err_pid*.log
 replay_pid*.log
 
-# 문서 파일은 저장소에 넣지 않음 (바탕화면에서만 관리)
-*.md
+# 문서 파일은 저장소에 넣지 않음 (docs 폴더와 보고서 docx/pdf는 바탕화면에서만 관리)
 docs/
 *.docx
 *.pdf
