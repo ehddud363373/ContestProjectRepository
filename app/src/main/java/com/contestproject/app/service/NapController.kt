@@ -157,6 +157,7 @@ class NapController(
 
     fun startNap(minutes: Int) {
         if (_state.value != NapState.Idle || _busy.value) return
+        if (!NapPolicy.isValidDuration(minutes)) return
         val status = vehicle.status.value
         if (status.connection !is VehicleConnection.Connected || status.gear == GearState.NOT_PARK) return
         store.lastDurationMin = minutes
@@ -200,7 +201,7 @@ class NapController(
             _busy.value = true
             try {
                 if (active is NapState.Resting) applyWakeClimate(_capabilities.value ?: ClimateCapabilities())
-                goToDepartCheck(active.session, canExtend = active.session.canExtend)
+                goToDepartCheck(active.session, allowExtend = true)
             } finally {
                 _busy.value = false
             }
@@ -211,10 +212,11 @@ class NapController(
     fun acknowledgeWake() {
         val active = _state.value as? NapState.Active ?: return
         when (active) {
-            is NapState.Waking -> goToDepartCheck(active.session, active.session.canExtend)
+            is NapState.Waking -> goToDepartCheck(active.session, allowExtend = true)
             is NapState.Alert -> goToDepartCheck(
                 active.session,
-                canExtend = active.reason == AlertReason.NO_RESPONSE && active.session.canExtend,
+                // 차량 경고 뒤에는 더 자지 않게 연장을 막는다.
+                allowExtend = active.reason == AlertReason.NO_RESPONSE,
             )
             else -> Unit
         }
@@ -226,14 +228,15 @@ class NapController(
         _state.value = alert.copy(snoozedUntilMs = clock() + NapPolicy.ALERT_SNOOZE_SEC * 1000L)
     }
 
-    fun extend() {
+    /** 출발 전 확인 [n분 더]. 앞서 쉰 시간과 합쳐 최대 시간을 넘는 길이는 받지 않는다. */
+    fun extend(minutes: Int) {
         val check = _state.value as? NapState.DepartCheck ?: return
-        if (!check.canExtend) return
+        if (minutes < NapPolicy.MIN_EXTENSION_MIN || minutes > check.maxExtensionMin || _busy.value) return
         scope.launch {
             _busy.value = true
             try {
                 val now = clock()
-                val session = check.session.extend(now)
+                val session = check.session.extend(now, minutes, awakeAtMs = check.awakeAtMs)
                 store.updateSession(session)
                 updateRecord { it.with(NapEvent(now, NapEvent.Kind.EXTENDED)).copy(defrostEndedAtMs = it.defrostEndedAtMs ?: now) }
                 val caps = _capabilities.value ?: ClimateCapabilities()
@@ -242,7 +245,7 @@ class NapController(
                 val climate = applyRestClimate(caps)
                 if (caps.defroster) target = target.copy(defroster = false)
                 _state.value = NapState.Resting(session, climate)
-                voice.announce(lines.extend(NapPolicy.EXTENSION_MIN))
+                voice.announce(lines.extend(minutes))
                 startTicking()
             } finally {
                 _busy.value = false
@@ -267,8 +270,16 @@ class NapController(
 
     private suspend fun resumeIfNeeded() {
         val (session, saved) = store.load() ?: return
-        voice.prepare()
         snapshot = saved
+        if (session.isStaleAt(clock())) {
+            // 깨울 시각이 한참 지나서 차가 켜졌다 = 사람이 이미 깨서 차를 켰다(꺼진 동안엔 깨울 수도 없었다).
+            // 이어서 깨우지 않고, 앱이 바꾼 공조·창문만 되돌리고 정리한다.
+            restoreClimate()
+            store.clearSession()
+            _notices.tryEmit(NapNotice.ENDED_WHILE_OFF)
+            return
+        }
+        voice.prepare()
         _monitor.value = NapMonitor(original = saved, record = store.loadRecord() ?: NapRecord())
         plan = ClimatePlanner.planFor(ClimatePlanner.seasonOf(vehicle.status.value.outsideTempC))
         val caps = _capabilities.value ?: ClimateCapabilities()
@@ -412,21 +423,22 @@ class NapController(
         lastVoiceAtMs = clock()
         updateRecord { it.with(NapEvent(lastVoiceAtMs, NapEvent.Kind.WAKE_CALL)) }
         val line = if (repeats == 0) {
-            lines.wake(session.plannedMinutes)
+            lines.wake(session.totalPlannedMinutes)
         } else {
             lines.wakeRepeat()
         }
         voice.announce(line, level = repeats)
     }
 
-    private fun goToDepartCheck(session: NapSession, canExtend: Boolean) {
+    private fun goToDepartCheck(session: NapSession, allowExtend: Boolean) {
         voice.stop()
         val now = clock()
         updateRecord { it.with(NapEvent(now, NapEvent.Kind.AWAKE)) }
         _state.value = NapState.DepartCheck(
             session = session,
             restedMinutes = session.restedMinutes(now),
-            canExtend = canExtend,
+            awakeAtMs = now,
+            maxExtensionMin = if (allowExtend) session.maxExtensionMinutes(now) else 0,
         )
     }
 

@@ -124,6 +124,7 @@ private fun NoticeBanner(notice: NapNotice?, onDismiss: () -> Unit, modifier: Mo
         val text = when (notice) {
             NapNotice.ENDED_BY_GEAR -> stringResource(R.string.notice_ended_by_gear)
             NapNotice.RESUMED_AFTER_RESTART -> stringResource(R.string.notice_resumed)
+            NapNotice.ENDED_WHILE_OFF -> stringResource(R.string.notice_ended_while_off)
             NapNotice.START_FAILED -> stringResource(R.string.notice_start_failed)
             NapNotice.DEPARTED -> stringResource(R.string.notice_departed)
             null -> ""

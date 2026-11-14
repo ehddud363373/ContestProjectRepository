@@ -8,6 +8,7 @@ import com.contestproject.app.data.vehicle.ClimateCapabilities
 import com.contestproject.app.data.vehicle.VehicleStatus
 import com.contestproject.app.domain.NapMonitor
 import com.contestproject.app.domain.NapNotice
+import com.contestproject.app.domain.NapPolicy
 import com.contestproject.app.domain.NapState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,12 +60,14 @@ class NapViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun selectMinutes(minutes: Int) { _selectedMinutes.value = minutes }
+    fun selectMinutes(minutes: Int) {
+        _selectedMinutes.value = minutes.coerceIn(NapPolicy.MIN_DURATION_MIN, NapPolicy.MAX_DURATION_MIN)
+    }
     fun startNap() = controller.startNap(_selectedMinutes.value)
     fun wakeNow() = controller.wakeNow()
     fun acknowledgeWake() = controller.acknowledgeWake()
     fun snoozeAlert() = controller.snoozeAlert()
-    fun extend() = controller.extend()
+    fun extend(minutes: Int) = controller.extend(minutes)
     fun depart() = controller.depart()
     fun dismissNotice() { _notice.value = null }
 

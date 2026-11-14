@@ -17,6 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +37,7 @@ import com.contestproject.app.domain.NapMonitor
 import com.contestproject.app.domain.NapPolicy
 import com.contestproject.app.domain.NapState
 import com.contestproject.app.presentation.component.CallDots
+import com.contestproject.app.presentation.component.MinuteStepper
 import com.contestproject.app.presentation.component.MonitorRow
 import com.contestproject.app.presentation.component.NapTimeline
 import com.contestproject.app.presentation.component.Panel
@@ -62,7 +67,7 @@ fun WakingScreen(
         main = { wide ->
             Text(formatTime(now), style = MaterialTheme.typography.bodyLarge, color = Shimpyo.colors.textSecondary)
             Text(
-                stringResource(R.string.wake_headline, state.session.plannedMinutes),
+                stringResource(R.string.wake_headline, state.session.totalPlannedMinutes),
                 style = if (wide) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
                 color = Shimpyo.colors.textPrimary,
             )
@@ -103,7 +108,7 @@ fun DepartScreen(
     vehicle: VehicleStatus,
     now: Long,
     busy: Boolean,
-    onExtend: () -> Unit,
+    onExtend: (Int) -> Unit,
     onDepart: () -> Unit,
 ) {
     ScreenScaffold(
@@ -111,21 +116,14 @@ fun DepartScreen(
         main = { _ ->
             Text(stringResource(R.string.depart_headline), style = MaterialTheme.typography.headlineLarge, color = Shimpyo.colors.textPrimary)
             Text(stringResource(R.string.depart_body), style = MaterialTheme.typography.bodyLarge, color = Shimpyo.colors.textSecondary)
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                SecondaryButton(
-                    text = stringResource(R.string.depart_extend, NapPolicy.EXTENSION_MIN),
-                    subtitle = stringResource(if (state.canExtend) R.string.depart_extend_once else R.string.depart_extend_used),
-                    onClick = onExtend,
-                    enabled = state.canExtend && !busy,
-                    modifier = Modifier.weight(1f),
-                    height = 120.dp,
-                    large = true,
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Bottom) {
+                ExtendControl(state, busy, onExtend, Modifier.weight(1f))
                 Box(Modifier.weight(1f)) {
                     PrimaryButton(
                         text = stringResource(R.string.depart_go),
                         onClick = onDepart,
-                        height = 120.dp,
+                        // 연장 시간 고르기가 있으면 왼쪽 묶음(고르기 + 연장 버튼)과 높이를 맞춘다.
+                        height = if (state.maxExtensionMin > 0) EXTEND_STEPPER_HEIGHT + EXTEND_GAP + EXTEND_BUTTON_HEIGHT else EXTEND_BUTTON_HEIGHT,
                         loading = busy,
                     )
                 }
@@ -136,6 +134,51 @@ fun DepartScreen(
         sideWidth = 460.dp,
     )
 }
+
+/**
+ * 연장: 앞서 쉰 시간과 합쳐 최대 시간을 넘지 않는 안에서 5분 단위로 고른다.
+ * 고를 수 있는 끝(maxExtensionMin)은 컨트롤러가 깬 시각 기준으로 정해 둔 값이라 화면에 머무는 동안 바뀌지 않는다.
+ */
+@Composable
+private fun ExtendControl(state: NapState.DepartCheck, busy: Boolean, onExtend: (Int) -> Unit, modifier: Modifier) {
+    val max = state.maxExtensionMin
+    val step = NapPolicy.EXTENSION_STEP_MIN
+    val min = NapPolicy.MIN_EXTENSION_MIN
+    var minutes by rememberSaveable(max) { mutableIntStateOf(NapPolicy.DEFAULT_EXTENSION_MIN.coerceIn(min, max.coerceAtLeast(min))) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(EXTEND_GAP)) {
+        if (max > 0) {
+            MinuteStepper(
+                value = stringResource(R.string.minutes, minutes),
+                onMinus = { minutes -= step },
+                onPlus = { minutes += step },
+                minusEnabled = minutes - step >= min,
+                plusEnabled = minutes + step <= max,
+                minusDescription = stringResource(R.string.stepper_less, step),
+                plusDescription = stringResource(R.string.stepper_more, step),
+                height = EXTEND_STEPPER_HEIGHT,
+            )
+        }
+        val subtitle = when {
+            max > 0 -> stringResource(R.string.depart_extend_total, state.restedMinutes + minutes, NapPolicy.MAX_DURATION_MIN)
+            // 최대 시간이 남았는데도 막혔다면 차량 경고 때문이다.
+            state.session.maxExtensionMinutes(state.awakeAtMs) > 0 -> stringResource(R.string.depart_extend_blocked)
+            else -> stringResource(R.string.depart_extend_full, NapPolicy.MAX_DURATION_MIN)
+        }
+        SecondaryButton(
+            text = if (max > 0) stringResource(R.string.depart_extend, minutes) else stringResource(R.string.depart_extend_none),
+            subtitle = subtitle,
+            onClick = { onExtend(minutes) },
+            enabled = max > 0 && !busy,
+            modifier = Modifier.fillMaxWidth(),
+            height = EXTEND_BUTTON_HEIGHT,
+            large = true,
+        )
+    }
+}
+
+private val EXTEND_STEPPER_HEIGHT = 64.dp
+private val EXTEND_GAP = 10.dp
+private val EXTEND_BUTTON_HEIGHT = 96.dp
 
 /** "출발을 누르면 되돌리는 값": 지금 값(차에서 읽은 값) → 쪽잠 전 값. 달라진 항목만. */
 @Composable

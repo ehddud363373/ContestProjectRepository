@@ -85,7 +85,7 @@ class PrefsNapStore(context: Context) : NapStore {
 
     override var lastDurationMin: Int
         get() = prefs.getInt(K_LAST_DURATION, NapPolicy.DEFAULT_DURATION_MIN)
-            .takeIf { it in NapPolicy.DURATION_OPTIONS_MIN } ?: NapPolicy.DEFAULT_DURATION_MIN
+            .takeIf { NapPolicy.isValidDuration(it) } ?: NapPolicy.DEFAULT_DURATION_MIN
         set(value) = prefs.edit { putInt(K_LAST_DURATION, value) }
 
     override var powertrainOverride: String?
