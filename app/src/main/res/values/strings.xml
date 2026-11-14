@@ -7,7 +7,7 @@
     <string name="now_time">지금 %1$s</string>
     <string name="remaining">남은 시간</string>
     <string name="connecting">차와 연결하는 중</string>
-    <string name="demo_chip">시연 모드 · 1분=4초</string>
+    <string name="demo_chip">시연 모드 · 1분=3초</string>
 
     <!-- 상단 상태 -->
     <string name="chip_park">P단 · 정차</string>

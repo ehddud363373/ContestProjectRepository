@@ -2,9 +2,12 @@ package com.contestproject.app.presentation.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.contestproject.app.presentation.theme.Shimpyo
+import kotlinx.coroutines.delay
 
 /** 화면 바깥 여백. 디자인 시안 1280×720 기준 */
 val ScreenPadding = PaddingValues(horizontal = 36.dp, vertical = 28.dp)
@@ -238,13 +248,40 @@ fun MinuteStepper(
     }
 }
 
+/**
+ * 한 번 누르면 1칸, 누르고 있으면 [HOLD_START_MS] 뒤부터 [HOLD_REPEAT_MS]마다 계속 움직인다.
+ * 1분 단위라 10분→30분이 20번 누르기가 되어서, 길게 누르기로 빨리 옮길 수 있게 했다.
+ * 끝에 닿아 버튼이 꺼지면 반복도 멈춘다.
+ */
 @Composable
 private fun StepperButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit, size: Dp) {
     val colors = Shimpyo.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val latestOnClick by rememberUpdatedState(onClick)
+    val latestEnabled by rememberUpdatedState(enabled)
+    // 길게 눌러 이미 움직였으면, 손을 뗄 때 오는 클릭 한 번은 버린다(한 칸 더 가지 않게).
+    var repeated by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (!pressed) return@LaunchedEffect
+        repeated = false
+        delay(HOLD_START_MS)
+        while (latestEnabled) {
+            repeated = true
+            latestOnClick()
+            delay(HOLD_REPEAT_MS)
+        }
+    }
     Box(
         Modifier
             .size(size)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                enabled = enabled,
+            ) {
+                if (repeated) repeated = false else onClick()
+            }
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
@@ -255,6 +292,9 @@ private fun StepperButton(symbol: String, description: String, enabled: Boolean,
         )
     }
 }
+
+private const val HOLD_START_MS = 450L
+private const val HOLD_REPEAT_MS = 110L
 
 @Composable
 fun NapProgressBar(progress: Float, description: String, color: Color = Shimpyo.colors.accent) {
