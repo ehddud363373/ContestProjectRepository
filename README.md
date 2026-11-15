@@ -30,33 +30,14 @@
 
 ## 실행 방법
 
-### 1. 에뮬레이터 켜기
+### 설치
 
-Pleos Connect Emulator v2.1 (API 34)를 **처음부터 부팅(Cold Boot)** 되게 켭니다. 아래 방법 중 아무거나 쓰면 됩니다.
+1. Pleos Connect Emulator v2.1 (API 34)를 **Cold Boot**로 켭니다. Device Manager에서 Cold Boot Now를 누르거나, Boot option을 Cold boot로 설정해 두고 실행하면 됩니다. (Quick boot로 켜면 차량 기능을 쓸 수 없어 공조·기어 값이 바뀌지 않습니다.)
+2. Virtual Console에서 Power System을 **On**으로 켭니다.
+3. `apk/눈만감았어_쉼표_release.apk`를 내려받아 에뮬레이터 화면에 **끌어다 놓으면** 설치됩니다. (`adb install`로 설치해도 됩니다.)
+4. 앱 목록에서 **쉼표**를 실행합니다.
 
-| 방법 | 설명 |
-|---|---|
-| Device Manager ▶ | 에뮬레이터의 Boot option이 **Cold boot**이면 ▶만 누르면 됩니다. 설정: Device Manager › 에뮬레이터 ⋮ › Edit › Show Advanced Settings › Boot option = Cold boot |
-| Device Manager ⋮ › Cold Boot Now | 설정을 바꾸지 않고 이번 한 번만 처음부터 켭니다 |
-| Android Studio ▶ Run | 실행 대상으로 Pleos Connect Emulator를 고르고 Run. 부팅 방식은 Boot option 설정을 따릅니다 |
-| 명령어 | `emulator -avd <AVD 이름> -no-snapshot-load` |
-
-> Boot option이 Quick boot이면 저장해 둔 상태에서 이어 켜지는데, 이때는 가상 차량(VHAL)과의 연결이 다시 맺어지지 않아 공조·기어 같은 차량 값을 읽거나 바꿀 수 없습니다. 차량 값이 바뀌지 않으면 Cold Boot Now로 다시 켜 주세요.
-
-### 2. 차 전원 켜기
-
-Virtual Console › Power System을 **On**으로 바꿉니다. 차 전원이 꺼져 있으면 공조 제어가 거부됩니다.
-
-### 3. APK 설치
-
-둘 중 하나를 쓰면 됩니다.
-
-- `apk/눈만감았어_쉼표_release.apk`를 내려받아 에뮬레이터 화면에 **끌어다 놓기**
-- 또는 `adb install apk/눈만감았어_쉼표_release.apk`
-
-설치 후 하단바 앱 목록(⊞)에서 **쉼표**(주황 배경의 흰 쉼표 아이콘)를 실행합니다.
-
-### 4. 빠르게 확인해 보기 (약 1분)
+### 빠르게 확인해 보기 (약 1분)
 
 1. 준비 화면 왼쪽 위 **"쉼표"를 길게 눌러** 시연 모드를 켭니다. 1분이 3초로 줄어들어 15분 쪽잠이 45초에 끝납니다. 다시 길게 누르면 꺼집니다.
 2. 기어가 P인지 확인하고 [쪽잠 시작]을 누릅니다.
