@@ -62,7 +62,9 @@ class PrefsNapStore(context: Context) : NapStore {
             plannedMinutes = prefs.getInt(K_PLANNED, NapPolicy.DEFAULT_DURATION_MIN),
             extensionUsed = prefs.getBoolean(K_EXTENDED, false),
             minuteMs = prefs.getLong(K_MINUTE, NapPolicy.MINUTE_MS),
-            priorRestMinutes = prefs.getInt(K_PRIOR_REST, 0),
+            // 예전 버전은 분으로 저장했다(K_PRIOR_REST). 새 값이 없으면 그것을 밀리초로 바꿔 읽는다.
+            priorRestMs = if (prefs.contains(K_PRIOR_REST_MS)) prefs.getLong(K_PRIOR_REST_MS, 0)
+            else prefs.getInt(K_PRIOR_REST, 0) * prefs.getLong(K_MINUTE, NapPolicy.MINUTE_MS),
         )
         val snapshot = ClimateSnapshot(
             hvacPower = bool(K_S_POWER),
@@ -106,7 +108,8 @@ class PrefsNapStore(context: Context) : NapStore {
         putInt(K_PLANNED, session.plannedMinutes)
         putBoolean(K_EXTENDED, session.extensionUsed)
         putLong(K_MINUTE, session.minuteMs)
-        putInt(K_PRIOR_REST, session.priorRestMinutes)
+        putLong(K_PRIOR_REST_MS, session.priorRestMs)
+        remove(K_PRIOR_REST)
     }
 
     private fun SharedPreferences.Editor.putBool(key: String, value: Boolean?) {
@@ -127,6 +130,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_EXTENDED = "extended"
         const val K_MINUTE = "minute_ms"
         const val K_PRIOR_REST = "prior_rest"
+        const val K_PRIOR_REST_MS = "prior_rest_ms"
         const val K_RECORD = "record"
         const val K_S_POWER = "s_power"
         const val K_S_RECIRC = "s_recirc"
@@ -145,7 +149,7 @@ class PrefsNapStore(context: Context) : NapStore {
         const val K_POWERTRAIN_OVERRIDE = "powertrain_override"
 
         val SESSION_KEYS = listOf(
-            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST, K_RECORD,
+            K_START, K_END, K_PLANNED, K_EXTENDED, K_MINUTE, K_PRIOR_REST, K_PRIOR_REST_MS, K_RECORD,
             K_S_POWER, K_S_RECIRC, K_S_AC, K_S_TEMP, K_S_FAN, K_S_DEFROST, K_S_SEAT, K_S_STEER, K_S_WINDOW,
             K_S_REAR_DEFROST, K_S_TEMP2, K_S_DUAL,
         )

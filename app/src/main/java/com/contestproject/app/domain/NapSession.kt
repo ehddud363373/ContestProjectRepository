@@ -13,12 +13,16 @@ data class NapSession(
     /** 한 번이라도 연장했는지 */
     val extensionUsed: Boolean,
     val minuteMs: Long,
-    /** 연장 전까지 쉰 시간(분, 여러 번 연장하면 누적). 출발 확인 화면의 "쉰 시간" 합계와 최대 시간 계산에 쓴다. */
-    val priorRestMinutes: Int = 0,
+    /**
+     * 연장 전까지 실제로 쉰 시간(밀리초, 여러 번 연장하면 누적).
+     * 분으로 미리 반올림해 저장하면 화면마다 숫자가 어긋난다(예: 2분 12초를 올림 3분으로 저장하면
+     * 연장 버튼은 "합쳐서 7분", 깨울 때는 "8분 지났어요"). 그래서 그대로 두고, 보여 줄 때만 분으로 바꾼다.
+     */
+    val priorRestMs: Long = 0,
 ) {
     val totalMs: Long get() = endAtMs - startedAtMs
-    /** 연장까지 합친 계획 시간(분). 깨울 때 "20분 지났어요"처럼 전체 시간을 말한다. */
-    val totalPlannedMinutes: Int get() = priorRestMinutes + plannedMinutes
+    /** 연장까지 합친 쉰 시간(분, 버림). 깨울 때 "20분 지났어요"처럼 말하고, 출발 화면의 "쉰 시간"과 같은 값이다. */
+    val totalPlannedMinutes: Int get() = ((priorRestMs + totalMs) / minuteMs).toInt()
     val preWakeAtMs: Long get() = endAtMs - NapPolicy.PRE_WAKE_LEAD_MIN * minuteMs
     val isDemo: Boolean get() = minuteMs != NapPolicy.MINUTE_MS
 
@@ -36,18 +40,17 @@ data class NapSession(
     fun progress(nowMs: Long): Float =
         ((nowMs - startedAtMs).toFloat() / totalMs).coerceIn(0f, 1f)
 
-    /** 실제로 쉰 시간(분). 시연 모드에서도 '15분'처럼 계획 단위로 보여 준다. */
-    fun restedMinutes(nowMs: Long): Int =
-        priorRestMinutes + ((nowMs.coerceAtMost(endAtMs) - startedAtMs) / minuteMs).toInt()
+    /** 지금까지 실제로 쉰 시간(밀리초, 앞선 쪽잠 포함). 깨울 시각 이후는 세지 않는다. */
+    fun restedMs(nowMs: Long): Long = priorRestMs + (nowMs.coerceAtMost(endAtMs) - startedAtMs).coerceAtLeast(0)
+
+    /** 실제로 쉰 시간(분, 버림). 화면에 보여 주는 값은 모두 이것을 쓴다. 시연 모드에서도 '15분'처럼 계획 단위로 보여 준다. */
+    fun restedMinutes(nowMs: Long): Int = (restedMs(nowMs) / minuteMs).toInt()
 
     /**
      * 연장 상한 계산용 "이미 쓴 시간"(분, 올림). 버림으로 계산하면 연장할 때마다 1분 미만이 버려져
      * 실제 총합이 MAX_DURATION_MIN을 넘을 수 있어서 올림으로 센다.
      */
-    fun usedMinutes(nowMs: Long): Int {
-        val elapsed = (nowMs.coerceAtMost(endAtMs) - startedAtMs).coerceAtLeast(0)
-        return priorRestMinutes + ((elapsed + minuteMs - 1) / minuteMs).toInt()
-    }
+    fun usedMinutes(nowMs: Long): Int = ((restedMs(nowMs) + minuteMs - 1) / minuteMs).toInt()
 
     /** 지금 연장할 수 있는 최대 길이(분). 앞서 쉰 시간과 합쳐 최대 시간을 넘지 않게 STEP 단위로 내린다. 0이면 연장 불가. */
     fun maxExtensionMinutes(nowMs: Long): Int {
@@ -69,7 +72,7 @@ data class NapSession(
             endAtMs = nowMs + minutes * minuteMs,
             plannedMinutes = minutes,
             extensionUsed = true,
-            priorRestMinutes = usedMinutes(awakeAtMs),
+            priorRestMs = restedMs(awakeAtMs),
         )
     }
 

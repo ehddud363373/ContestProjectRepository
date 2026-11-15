@@ -67,8 +67,22 @@ class NapSessionTest {
         val s = NapSession.start(0, 15)
         // 7분째에 깨고 화면에서 3분 머문 뒤 연장해도 깬 시각 기준 상한(20분)이 그대로다
         val extended = s.extend(nowMs = 10 * minute, minutes = 20, awakeAtMs = 7 * minute)
-        assertEquals(7, extended.priorRestMinutes)
+        assertEquals(7 * minute, extended.priorRestMs)
         assertEquals(27, extended.totalPlannedMinutes)
+    }
+
+    @Test
+    fun `연장 버튼의 합계, 깨울 때 말하는 시간, 출발 화면의 쉰 시간이 모두 같다`() {
+        // 2분 12초에 깨서 5분 연장: 어느 화면이든 '7분'이어야 한다(예전엔 버튼 7분, 깨울 때 8분으로 어긋남)
+        val awake = 2 * minute + 12_000
+        val s = NapSession.start(0, 15)
+        assertEquals(2, s.restedMinutes(awake))                       // 출발 화면 '쉰 시간'
+        assertEquals(2 + 5, s.restedMinutes(awake) + 5)                // 연장 버튼 '합쳐서 7분'
+        val extended = s.extend(nowMs = awake, minutes = 5, awakeAtMs = awake)
+        assertEquals(7, extended.totalPlannedMinutes)                  // 깨울 때 '7분 지났어요'
+        assertEquals(7, extended.restedMinutes(extended.endAtMs))      // 다시 깬 뒤 '쉰 시간'
+        // 상한은 올림으로 세서 30분을 넘지 않는다: 7분 12초 사용 → 8분으로 보고 22분까지
+        assertEquals(22, extended.maxExtensionMinutes(extended.endAtMs))
     }
 
     @Test
