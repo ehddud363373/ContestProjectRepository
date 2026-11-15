@@ -24,10 +24,13 @@ P단에서 쪽잠 시간(10~30분, 1분 단위, 권장 15~20분)을 정하고 �
 ## 실행 방법
 
 ### 제출용 APK로 바로 설치
-1. Pleos Connect Emulator v2.1 (API 34)를 **Cold Boot**로 켭니다.
-   - Android Studio › Device Manager › 에뮬레이터 오른쪽 ⋮ › **Cold Boot Now**
-   - 명령어로 켤 때: `emulator -avd <AVD 이름> -no-snapshot-load`
-   - 빠른 부팅(Quick Boot)은 저장해 둔 상태에서 이어 켜는 방식이라, 가상 차량(VHAL)과의 연결이 다시 맺어지지 않아 공조·기어 같은 차량 값을 읽거나 바꿀 수 없습니다.
+1. Pleos Connect Emulator v2.1 (API 34)를 **처음부터 부팅(Cold Boot)** 되게 켭니다. 아래 방법 중 아무거나 쓰면 됩니다.
+   - **Device Manager ▶ (실행 버튼)**: 에뮬레이터 설정의 부팅 옵션이 Cold boot이면 ▶만 눌러도 됩니다.
+     설정 방법: Device Manager › 에뮬레이터 ⋮ › Edit › Show Advanced Settings(More settings) › Boot option = **Cold boot**
+   - **Device Manager ⋮ › Cold Boot Now**: 설정을 바꾸지 않고 이번 한 번만 처음부터 켭니다.
+   - **Android Studio ▶ Run**: 실행 대상 기기로 Pleos Connect Emulator를 고르고 Run (부팅 방식은 위 Boot option을 따릅니다).
+   - **명령어**: `emulator -avd <AVD 이름> -no-snapshot-load`
+   - 주의: 부팅 옵션이 Quick boot인 상태에서 ▶를 누르면 저장해 둔 상태에서 이어 켜집니다. 이때는 가상 차량(VHAL)과의 연결이 다시 맺어지지 않아 공조·기어 같은 차량 값을 읽거나 바꿀 수 없습니다. 차량 값이 바뀌지 않으면 Cold Boot Now로 다시 켜 주세요.
 2. Virtual Console › Power System을 **On**으로 바꿉니다. (차 전원이 꺼져 있으면 공조 제어가 거부됩니다)
 3. APK를 설치합니다. 둘 중 하나:
    - `apk/눈만감았어_쉼표_release.apk`를 내려받아 에뮬레이터 화면에 **끌어다 놓기**
