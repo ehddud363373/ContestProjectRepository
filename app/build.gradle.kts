@@ -1,26 +1,47 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
+// release 서명 정보는 git에 올리지 않는 local.properties에서만 읽는다(키 파일도 저장소 밖에 둔다).
+// 값이 없으면 release는 서명 없이 빌드되고(설치 불가), 디버그·테스트 빌드에는 영향이 없다.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+val releaseKeystore = localProps.getProperty("SHIMPYO_KEYSTORE")
+
 android {
-    namespace = "com.contestproject.app"
+    namespace = "com.shimpyo.app"
     compileSdk = 35
     // CarPropertyManager(기어·바깥 온도·시동 상태)용 AAOS 라이브러리. 차량에 기본 탑재돼 있다.
     useLibrary("android.car")
 
     defaultConfig {
-        // TODO(제출 전): applicationId 확정. Pleos 배포 후에는 변경 불가.
-        applicationId = "com.contestproject.app"
+        // Pleos 배포 후에는 바꿀 수 없다.
+        applicationId = "com.shimpyo.app"
         minSdk = 28      // Pleos 요구사항: API 28 이상
         targetSdk = 34   // Pleos Connect Emulator = API 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = localProps.getProperty("SHIMPYO_STORE_PASSWORD")
+                keyAlias = localProps.getProperty("SHIMPYO_KEY_ALIAS")
+                keyPassword = localProps.getProperty("SHIMPYO_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             // R8로 코드 축소·최적화(앱 시작 속도와 APK 크기 개선). Pleos SDK는 proguard-rules.pro에서 보존한다.
             isMinifyEnabled = true
             isShrinkResources = true
